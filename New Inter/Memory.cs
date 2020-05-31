@@ -1,9 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Resources;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace New_Inter
 {
@@ -40,11 +38,21 @@ namespace New_Inter
             {
                 variable = Variables.Find(x => x.Name == name && x.Block == block);
 
-                block = block.Split('/')[0];
-
-                if (block == "")
+                if (block != null)
                 {
-                    block = null;
+                    if (block.Contains('/'))
+                    {
+                        block = block.Split('/')[0];
+                    }
+                    else
+                    {
+                        block = null;
+                    }
+                }
+
+                if (block == "" || block is null)
+                {
+                    return variable;
                 }
 
             } while (variable is null);
@@ -231,6 +239,7 @@ namespace New_Inter
             Index = i;
             Length = l;
         }
+        
 
         public int Index;
         public int Length;
@@ -269,6 +278,11 @@ namespace New_Inter
         public void SetValue(string s)
         {
             Memory.ResetVariable(Name, Block, s);
+        }
+
+        public override string ToString()
+        {
+            return Name + ":" + GetValue();
         }
 
         public string Name;

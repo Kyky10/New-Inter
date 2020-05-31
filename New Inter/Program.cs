@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 
 namespace New_Inter
@@ -11,8 +12,15 @@ namespace New_Inter
             var file = Environment.GetFolderPath(Environment.SpecialFolder.Desktop) + "\\" + "program.inter";
             var txt = File.ReadAllText(file);
             var lib = new Lib(txt);
-            var a = lib.Exec(new object[] {30});
+            lib.PreCompile(new List<object> {4});
 
+            while (lib.MainReturn is null)
+            {
+                lib.Step();
+            }
+
+            Console.WriteLine(lib.MainReturn.Value.ToString());
+            Console.ReadLine();
         }
     }
 }

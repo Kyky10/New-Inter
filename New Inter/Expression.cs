@@ -1,11 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Net.NetworkInformation;
-using System.Runtime.InteropServices;
-using System.Security.Principal;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace New_Inter
 {
@@ -14,7 +9,6 @@ namespace New_Inter
         public string Txt;
         public ExpType type;
         public PreType preType;
-
         public Func<object> ExecFunc
         {
             get
@@ -24,10 +18,13 @@ namespace New_Inter
             }
             set => Func = value;
         }
-
-        private object execValue;
         public Func<object> Func;
         public string Block;
+        public Statement Statement;
+        public object CallFunctionReturn;
+        public bool AwaitReturn;
+
+        private object execValue;
 
         private readonly string[][] Tokens = {
             new[]{"=", "+", "-", "+=", "-=", "||", "&&", "==", "!=", ">", "<", ">=", "<="}, //binary 0
@@ -37,11 +34,14 @@ namespace New_Inter
             };
 
 
-        public Expression(string txt, string block)
+        public Expression(string txt, string block, Statement statement)
         {
             txt = txt.Trim();
             Txt = txt;
             Block = block;
+            Statement = statement;
+            CallFunctionReturn = null;
+            AwaitReturn = false;
 
             var binaryOperators = Tokens[0]
                 .OrderByDescending(x => x.Length)
@@ -81,7 +81,7 @@ namespace New_Inter
                 type = ExpType.Literar;
                 preType = PreType.Par;
 
-                var exp = new Expression(txt, Block);
+                var exp = new Expression(txt, Block ,Statement);
 
                 ExecFunc = exp.ExecFunc;
                 return;
@@ -97,23 +97,23 @@ namespace New_Inter
 
                     var len = @operator.Length;
                     var exprTxt = txt.Substring(len, txt.Length - len);
-                    var expr = new Expression(exprTxt, Block);
+                    var expr = new Expression(exprTxt, Block ,Statement);
 
                     if (@operator == "&")
                     {
-                        ExecFunc = () => expr.ExecFunc();
+                        ExecFunc = () => expr.GetValue();
                         return;
                     }
                     if (@operator == "*")
                     {
-                        ExecFunc = () => expr.ExecFunc();
+                        ExecFunc = () => expr.GetValue();
                         return;
                     }
                     if (@operator == "-")
                     {
                         ExecFunc = () =>
                         {
-                            var value = expr.ExecFunc();
+                            var value = expr.GetValue();
 
                             if (value is int i)
                             {
@@ -132,6 +132,21 @@ namespace New_Inter
                                 }
                             }
 
+                            if (expr.preType == PreType.Ind)
+                            {
+                                var variable = expr.Func().ToString();
+                                var variable1 = Memory.GetVariable(variable, Block);
+                                if (value is string ss)
+                                {
+                                    variable1.SetValue(ss);
+                                }
+
+                                if (value is int ii)
+                                {
+                                    variable1.SetValue(ii);
+                                }
+                            }
+
                             return value;
                         };
                         return;
@@ -140,7 +155,7 @@ namespace New_Inter
                     {
                         ExecFunc = () =>
                         {
-                            var value = expr.ExecFunc();
+                            var value = expr.GetValue();
 
                             if (value is int i)
                             {
@@ -159,6 +174,21 @@ namespace New_Inter
                                 }
                             }
 
+                            if (expr.preType == PreType.Ind)
+                            {
+                                var variable = expr.Func().ToString();
+                                var variable1 = Memory.GetVariable(variable, Block);
+                                if (value is string ss)
+                                {
+                                    variable1.SetValue(ss);
+                                }
+
+                                if (value is int ii)
+                                {
+                                    variable1.SetValue(ii);
+                                }
+                            }
+
                             return value;
                         };
                         return;
@@ -167,7 +197,7 @@ namespace New_Inter
                     {
                         ExecFunc = () =>
                         {
-                            var value = expr.ExecFunc();
+                            var value = expr.GetValue();
 
                             if (value is int i)
                             {
@@ -179,6 +209,21 @@ namespace New_Inter
                                 value = s.ToUpper();
                             }
 
+                            if (expr.preType == PreType.Ind)
+                            {
+                                var variable = expr.Func().ToString();
+                                var variable1 = Memory.GetVariable(variable, Block);
+                                if (value is string ss)
+                                {
+                                    variable1.SetValue(ss);
+                                }
+
+                                if (value is int ii)
+                                {
+                                    variable1.SetValue(ii);
+                                }
+                            }
+
                             return value;
                         };
                         return;
@@ -187,7 +232,7 @@ namespace New_Inter
                     {
                         ExecFunc = () =>
                         {
-                            var value = expr.ExecFunc();
+                            var value = expr.GetValue();
 
                             if (value is int i)
                             {
@@ -197,6 +242,21 @@ namespace New_Inter
                             if (value is string s)
                             {
                                 value = s.ToLower();
+                            }
+
+                            if (expr.preType == PreType.Ind)
+                            {
+                                var variable = expr.Func().ToString();
+                                var variable1 = Memory.GetVariable(variable, Block);
+                                if (value is string ss)
+                                {
+                                    variable1.SetValue(ss);
+                                }
+
+                                if (value is int ii)
+                                {
+                                    variable1.SetValue(ii);
+                                }
                             }
 
                             return value;
@@ -206,8 +266,7 @@ namespace New_Inter
 
                     return;
                 }
-
-                if (txt.EndsWith(@operator))
+                else if (txt.EndsWith(@operator))
                 {
                     type = ExpType.Unitary;
                     preType = PreType.None;
@@ -215,13 +274,14 @@ namespace New_Inter
 
                     var len = @operator.Length;
                     var exprTxt = txt.Substring(0, txt.Length - len);
-                    var expr = new Expression(exprTxt, Block);
+                    var expr = new Expression(exprTxt, Block, Statement);
+
 
                     if (@operator == "++")
                     {
                         ExecFunc = () =>
                         {
-                            var value = expr.ExecFunc();
+                            var value = expr.GetValue();
 
                             if (value is int i)
                             {
@@ -233,6 +293,21 @@ namespace New_Inter
                                 value = s.ToUpper();
                             }
 
+                            if (expr.preType == PreType.Ind)
+                            {
+                                var variable = expr.Func().ToString();
+                                var variable1 = Memory.GetVariable(variable, Block);
+                                if (value is string ss)
+                                {
+                                    variable1.SetValue(ss);
+                                }
+
+                                if (value is int ii)
+                                {
+                                    variable1.SetValue(ii);
+                                }
+                            }
+
                             return value;
                         };
                         return;
@@ -241,7 +316,7 @@ namespace New_Inter
                     {
                         ExecFunc = () =>
                         {
-                            var value = expr.ExecFunc();
+                            var value = expr.GetValue();
 
                             if (value is int i)
                             {
@@ -253,12 +328,25 @@ namespace New_Inter
                                 value = s.ToLower();
                             }
 
+                            if (expr.preType == PreType.Ind)
+                            {
+                                var variable = expr.Func().ToString();
+                                var variable1 = Memory.GetVariable(variable, Block);
+                                if (value is string ss)
+                                {
+                                    variable1.SetValue(ss);
+                                }
+
+                                if (value is int ii)
+                                {
+                                    variable1.SetValue(ii);
+                                }
+                            }
+
                             return value;
                         };
                         return;
                     }
-
-                    return;
                 }
             }
 
@@ -296,10 +384,10 @@ namespace New_Inter
                 var op = txt.Substring(ops[0].i, ops[0].l);
 
                 var exps1 = txt.Substring(0, ops[0].i);
-                var exps2 = txt.Substring(ops[0].i + 1);
+                var exps2 = txt.Substring(ops[0].i + 1 + ops[0].l);
 
-                var exp1 = new Expression(exps1, Block);
-                var exp2 = new Expression(exps2, Block);
+                var exp1 = new Expression(exps1, Block ,Statement);
+                var exp2 = new Expression(exps2, Block ,Statement);
 
                 type = ExpType.Binary;
                 preType = PreType.None;
@@ -323,22 +411,34 @@ namespace New_Inter
                 {
                     var paranteseTrim = parantese.Trim();
 
-                    var expresion = new Expression(paranteseTrim, Block);
+                    var expresion = new Expression(paranteseTrim, Block ,Statement);
                     parametersExpresions.Add(expresion);
                 }
 
                 ExecFunc = () =>
                 {
-                    var fu = Memory.GetFunction(noParanteses);
-                    var parameters = new List<object>();
-                    foreach (var expresion in parametersExpresions)
+                    if (!AwaitReturn)
                     {
-                        parameters.Add(expresion.GetValue());
+                        AwaitReturn = true;
+
+                        var parameters = new List<object>();
+                        foreach (var expresion in parametersExpresions)
+                        {
+                            parameters.Add(expresion.GetValue());
+                        }
+
+                        var lib = Statement.Function.Lib;
+                        lib.AccessNewFunction(noParanteses, parameters);
+
+                        return null;
                     }
+                    else
+                    {
+                        var ret = CallFunctionReturn;
+                        AwaitReturn = false;
 
-                    var ret = fu.ExecFunc(parameters.ToArray());
-
-                    return ret;
+                        return ((Return)ret).Value;
+                    }
                 };
 
                 return;
@@ -856,12 +956,12 @@ namespace New_Inter
                                     var variable2 = Memory.GetVariable(exec2.ToString(), Block);
                                     var value2 = variable2.GetValue();
 
-                                    var var = ss.ToString().Replace(value2.ToString(), "");
+                                    var var = ss.Replace(value2.ToString(), "");
                                     return var;
                                 }
                                 else
                                 {
-                                    var var = ss.ToString().Replace(exec2.ToString(), "");
+                                    var var = ss.Replace(exec2.ToString(), "");
                                     return var;
                                 }
 
@@ -887,7 +987,7 @@ namespace New_Inter
                                 }
                                 else if (exec2 is string sss)
                                 {
-                                    var var = ii.ToString().ToString().Replace(sss, "");
+                                    var var = ii.ToString().Replace(sss, "");
                                     return var;
                                 }
                             }

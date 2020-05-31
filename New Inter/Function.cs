@@ -39,7 +39,7 @@ namespace New_Inter
             }
 
             var statTxt = idnenStatment[1];
-            var statament = new Statement(statTxt, Block);
+            var statament = new Statement(statTxt, this, Block);
             Branch.Add(statament);
 
             
@@ -100,10 +100,10 @@ namespace New_Inter
                     tree.Add(GetTree(s));
                 }
 
-                if (b is Expression e)
+                /*if (b is Expression e)
                 {
                     tree.Add(e);
-                }
+                }*/
             }
             tree.Add(statement);
 

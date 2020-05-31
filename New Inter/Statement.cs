@@ -25,13 +25,15 @@ namespace New_Inter
         public string Block;
         private object execValue;
         public Func<object> Func;
+        public Function Function;
 
-        public Statement(string txt, string prevBlock = null)
+        public Statement(string txt, Function func, string prevBlock = null)
         {
             Branch = new List<Object>();
+            Random = new Random();
+            Function = func;
             txt = txt.Trim();
             Txt = txt;
-            Random = new Random();
             var randomStr = RandomString(10);
 
             Block = prevBlock;
@@ -52,7 +54,7 @@ namespace New_Inter
                     if ((par > nextStat || par < 0))
                     {
                         var statStr = statTxt.Split(new[] {';'}, 2, StringSplitOptions.RemoveEmptyEntries);
-                        var stat = new Statement(statStr[0], Block);
+                        var stat = new Statement(statStr[0], Function, Block);
                         stats.Add(stat);
 
                         nextStat++;
@@ -61,7 +63,7 @@ namespace New_Inter
                     }
                     else if (nextStat < 0)
                     {
-                        var stat = new Statement(statTxt, Block);
+                        var stat = new Statement(statTxt, Function, Block);
                         stats.Add(stat);
                     }
                     else
@@ -74,7 +76,7 @@ namespace New_Inter
 
                         var statStr = statTxt.Substring(0, par);
 
-                        var stat = new Statement(statStr, Block);
+                        var stat = new Statement(statStr, Function, Block);
                         stats.Add(stat);
 
                         par++;
@@ -102,9 +104,9 @@ namespace New_Inter
 
                 var exprP = txt.Substring(2, txt.Length - 2);
                 var exprTxt =  GetExpressionPar(exprP);
-                var expr = new Expression(exprTxt, Block);
+                var expr = new Expression(exprTxt, Block, this);
                 var txtSplit = txt.Split(new[] { '(' + exprTxt + ')'}, StringSplitOptions.None);
-                var ifStat = new Statement(txtSplit[1], Block);
+                var ifStat = new Statement(txtSplit[1], Function, Block);
 
                 Branch.Add(expr);
 
@@ -128,9 +130,9 @@ namespace New_Inter
 
                 var exprP = txt.Substring(5, txt.Length - 5);
                 var exprTxt = GetExpressionPar(exprP);
-                var expr = new Expression(exprTxt, Block);
+                var expr = new Expression(exprTxt, Block, this);
                 var txtSplit = txt.Split(new[] { '(' + exprTxt + ')' }, StringSplitOptions.None);
-                var whileStat = new Statement(txtSplit[1], Block);
+                var whileStat = new Statement(txtSplit[1], Function, Block);
 
                 Branch.Add(expr);
 
@@ -140,7 +142,7 @@ namespace New_Inter
 
                     while (IsTrue(value))
                     {
-                        var tree = GetTree(whileStat);
+                        var tree = treeToList(GetTree(whileStat));
                         ExecTree(tree);
                         value = expr.GetValue();
                     }
@@ -153,7 +155,7 @@ namespace New_Inter
             if (txt.StartsWith("return"))
             {
                 var exprP = txt.Substring(7, txt.Length - 7);
-                var expr = new Expression(exprP, Block);
+                var expr = new Expression(exprP, Block, this);
 
                 Branch.Add(expr);
 
@@ -173,7 +175,7 @@ namespace New_Inter
                 var inSplitEx = inEx.Split(new []{'='}, 2);
                 var identifier = inSplitEx[0].Trim();
                 var expressionTxt = inSplitEx[1];
-                var expression = new Expression(expressionTxt, Block);
+                var expression = new Expression(expressionTxt, Block, this);
 
                 Branch.Add(expression);
 
@@ -191,6 +193,11 @@ namespace New_Inter
                         Memory.SetVariable(identifier, Block, i);
                     }
 
+                    if (value is bool b)
+                    {
+                        Memory.SetVariable(identifier, Block, b ? 1 : 0);
+                    }
+
                     return null;
                 };
                 return;
@@ -201,7 +208,7 @@ namespace New_Inter
                 ExecFunc = () => null;
             }
 
-            var exp = new Expression(txt, Block);
+            var exp = new Expression(txt, Block, this);
 
             Branch.Add(exp);
             ExecFunc = () => exp.ExecFunc();
@@ -211,7 +218,7 @@ namespace New_Inter
         {
             if (ob is int i)
             {
-                return i % 2 != 0;
+                return i % 2 == 1;
             }
             else if (ob is string s)
             {
@@ -317,6 +324,22 @@ namespace New_Inter
             return null;
         }
 
+        private List<object> treeToList(List<object> tree)
+        {
+            var line = new List<object>();
+            foreach (object t in tree)
+            {
+                if (t is List<object> list)
+                {
+                    line.AddRange(treeToList(list));
+                    continue;
+                }
+                line.Add(t);
+            }
+
+            return line;
+        }
+
         private List<object> GetTree(Statement statement)
         {
             var tree = new List<object>();
@@ -327,10 +350,10 @@ namespace New_Inter
                     tree.Add(GetTree(s));
                 }
 
-                if (b is Expression e)
+                /*if (b is Expression e)
                 {
                     tree.Add(e);
-                }
+                }*/
             }
             tree.Add(statement);
 
