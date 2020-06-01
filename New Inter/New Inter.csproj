@@ -43,6 +43,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="DefaultFunction.cs" />
     <Compile Include="Expression.cs" />
     <Compile Include="Ext.cs" />
     <Compile Include="Function.cs" />
@@ -50,6 +51,7 @@
     <Compile Include="Memory.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Return.cs" />
     <Compile Include="Statement.cs" />
   </ItemGroup>
   <ItemGroup>

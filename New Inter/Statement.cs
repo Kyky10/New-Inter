@@ -7,18 +7,6 @@ namespace New_Inter
     class Statement
     {
         public List<Object> Branch;
-        public Func<object> ExecFunc
-        {
-            get
-            {
-                if (execValue is null)
-                {
-                    execValue = Func();
-                }
-                return () => execValue;
-            }
-            set => Func = value;
-        }
 
         public string Txt;
         private Random Random;
@@ -26,6 +14,7 @@ namespace New_Inter
         private object execValue;
         public Func<object> Func;
         public Function Function;
+        public bool Ignone;
 
         public Statement(string txt, Function func, string prevBlock = null)
         {
@@ -34,6 +23,7 @@ namespace New_Inter
             Function = func;
             txt = txt.Trim();
             Txt = txt;
+            Ignone = false;
             var randomStr = RandomString(10);
 
             Block = prevBlock;
@@ -42,6 +32,8 @@ namespace New_Inter
 
             if (GetStr(txt, out var outStr, '{', '}') && txt.StartsWith("{"))
             {
+                Ignone = true;
+
                 var statTxt = outStr;
                 var stats = new List<Statement>();
 
@@ -90,9 +82,9 @@ namespace New_Inter
                  
                 Branch.AddRange(stats);
 
-                ExecFunc = () => null;
+                Func = () => null;//ExecTree(treeToList(Branch));
                 /*{
-                    stats.ForEach(x => x.ExecFunc());
+                    stats.ForEach(x => x.Func());
                     return null;
                 };*/
                 return;
@@ -105,18 +97,31 @@ namespace New_Inter
                 var exprP = txt.Substring(2, txt.Length - 2);
                 var exprTxt =  GetExpressionPar(exprP);
                 var expr = new Expression(exprTxt, Block, this);
-                var txtSplit = txt.Split(new[] { '(' + exprTxt + ')'}, StringSplitOptions.None);
-                var ifStat = new Statement(txtSplit[1], Function, Block);
+                var split = '(' + exprTxt + ')';
+                var positionSplit = txt.IndexOf(split, StringComparison.Ordinal);
+                var txtSplit = txt.Substring(positionSplit + split.Length, txt.Length - positionSplit - split.Length);
+                var ifStat = new Statement(txtSplit, Function, Block);
+                var tree = new List<object>();
 
                 Branch.Add(expr);
 
-                ExecFunc = () =>
+                Func = () =>
                 {
+                    if (!tree.Any())
+                    {
+                        tree = treeToList(GetTree(ifStat));
+                    }
                     var value = expr.GetValue();
 
                     if (IsTrue(value))
                     {
-                        ifStat.ExecFunc();
+                        var ret = ExecTree(tree);
+                        if (ret != null)
+                        {
+                            return ret;
+                        }
+
+                        return new Return(null, Flag.Continue);
                     }
 
                     return null;
@@ -131,20 +136,27 @@ namespace New_Inter
                 var exprP = txt.Substring(5, txt.Length - 5);
                 var exprTxt = GetExpressionPar(exprP);
                 var expr = new Expression(exprTxt, Block, this);
-                var txtSplit = txt.Split(new[] { '(' + exprTxt + ')' }, StringSplitOptions.None);
-                var whileStat = new Statement(txtSplit[1], Function, Block);
+                var split = '(' + exprTxt + ')';
+                var positionSplit = txt.IndexOf(split, StringComparison.Ordinal);
+                var txtSplit = txt.Substring(positionSplit + split.Length, txt.Length - positionSplit - split.Length);
+                var whileStat = new Statement(txtSplit, Function, Block);
+                var tree = new List<object>();
+
 
                 Branch.Add(expr);
 
-                ExecFunc = () =>
+                Func = () =>
                 {
+                    if (!tree.Any())
+                    {
+                        tree = treeToList(GetTree(whileStat));
+                    }
                     var value = expr.GetValue();
 
-                    while (IsTrue(value))
+                    if (IsTrue(value))
                     {
-                        var tree = treeToList(GetTree(whileStat));
-                        ExecTree(tree);
-                        value = expr.GetValue();
+                        var ret = ExecTree(tree);
+                        return new Return(null, Flag.Repeat);
                     }
 
                     return null;
@@ -159,7 +171,7 @@ namespace New_Inter
 
                 Branch.Add(expr);
 
-                ExecFunc = () =>
+                Func = () =>
                 {
                     var value = expr.GetValue();
                     var ret = new Return(value);
@@ -179,7 +191,7 @@ namespace New_Inter
 
                 Branch.Add(expression);
 
-                ExecFunc = () =>
+                Func = () =>
                 {
                     var value = expression.GetValue();
 
@@ -205,13 +217,13 @@ namespace New_Inter
 
             if (txt.Length == 0)
             {
-                ExecFunc = () => null;
+                Func = () => null;
             }
 
             var exp = new Expression(txt, Block, this);
 
             Branch.Add(exp);
-            ExecFunc = () => exp.ExecFunc();
+            Func = () => exp.Func();
         }
 
         private bool IsTrue(object ob)
@@ -355,7 +367,10 @@ namespace New_Inter
                     tree.Add(e);
                 }*/
             }
-            tree.Add(statement);
+            if (!statement.Ignone)
+            {
+                tree.Add(statement);
+            }
 
             return tree;
         }
@@ -370,11 +385,11 @@ namespace New_Inter
                 var b = tree[i];
                 if (b is Expression e)
                 {
-                    o = e.ExecFunc();
+                    o = e.Func();
                 }
                 if (b is Statement s)
                 {
-                    o = s.ExecFunc();
+                    o = s.Func();
                 }
 
                 if (b is List<object> lo)
@@ -384,9 +399,15 @@ namespace New_Inter
 
                 if (o is Return retO)
                 {
-                    ret = retO;
-                    break;
+                    if (retO.Flag != Flag.Continue)
+                    {
+                        ret = retO;
+                        break;
+                    }
                 }
+
+                tree.Remove(b);
+                i--;
             }
 
             return ret;
@@ -402,16 +423,6 @@ namespace New_Inter
             const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
             return new string(Enumerable.Repeat(chars, length)
                 .Select(s => s[Random.Next(s.Length)]).ToArray());
-        }
-    }
-
-
-    class Return
-    {
-        public object Value;
-        public Return(object value = null)
-        {
-            Value = value;
         }
     }
 }

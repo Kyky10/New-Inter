@@ -10,16 +10,20 @@ namespace New_Inter
         {
             Memory.Reset();
             var file = Environment.GetFolderPath(Environment.SpecialFolder.Desktop) + "\\" + "program.inter";
+            if (args.Length > 0)
+            {
+                file = args[0];
+            }
+            
             var txt = File.ReadAllText(file);
             var lib = new Lib(txt);
-            lib.PreCompile(new List<object> {4});
+            lib.PreCompile(new List<object> {3});
 
             while (lib.MainReturn is null)
             {
                 lib.Step();
             }
 
-            Console.WriteLine(lib.MainReturn.Value.ToString());
             Console.ReadLine();
         }
     }

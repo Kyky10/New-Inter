@@ -24,9 +24,15 @@ namespace New_Inter
             Block = RandomString(5);
             Branch = new List<Statement>();
             Parameters = new List<string>();
-           
+            ExecFunc = o => null;
+
             txt = txt.Trim();
             Txt = txt;
+
+            if (string.IsNullOrWhiteSpace(txt))
+            {
+                return;
+            }
 
             var idnenStatment = txt.Split(new[]{':'}, 2);
             var idenParam = idnenStatment[0].Split(new[] {' '}, 2);
@@ -39,14 +45,17 @@ namespace New_Inter
             }
 
             var statTxt = idnenStatment[1];
-            var statament = new Statement(statTxt, this, Block);
-            Branch.Add(statament);
+            if (!string.IsNullOrWhiteSpace(statTxt))
+            {
+                var statament = new Statement(statTxt, this, Block);
+                Branch.Add(statament);
+            }
 
-            
+
 
             ExecFunc = o =>
             {
-                var tree = treeToList(GetTree(statament));
+                var tree = treeToList(GetTree(Branch[0]));
 
                 var arr = (object[]) o;
                 for (int i = 0; i < Parameters.Count; i++)
@@ -87,12 +96,20 @@ namespace New_Inter
 
         public List<object> GetTree(Statement statement = null)
         {
+            var tree = new List<object>();
+
             if (statement is null)
             {
-                statement = Branch[0];
+                if (Branch.Any())
+                {
+                    statement = Branch[0];
+                }
+                else
+                {
+                    return tree;
+                }
             }
 
-            var tree = new List<object>();
             foreach (object b in statement.Branch)
             {
                 if (b is Statement s)
@@ -105,7 +122,11 @@ namespace New_Inter
                     tree.Add(e);
                 }*/
             }
-            tree.Add(statement);
+
+            if (!statement.Ignone)
+            {
+                tree.Add(statement);
+            }
 
             return tree;
         }
@@ -120,11 +141,11 @@ namespace New_Inter
                 var b = tree[i];
                 if (b is Expression e)
                 {
-                    o = e.ExecFunc();
+                    o = e.Func();
                 }
                 if (b is Statement s)
                 {
-                    o = s.ExecFunc();
+                    o = s.Func();
                 }
 
                 if (b is List<object> lo)

@@ -9,31 +9,33 @@ namespace New_Inter
 {
     class Lib
     {
-        public List<Function> Functions = new List<Function>();
         public string Txt;
         public bool FunctionCall;
-        public (string function, List<object> parameters, (List<object> line, int i) exec, object retObj) ReturnFunc;
-        public List<(string function, List<object> parameters, (List<object> line, int i) exec, object retObj)> FunctionsExec;
+        public (string function, List<object> parameters, (List<object> line, int i, Function function) exec, object retObj) ReturnFunc;
+        public List<(string function, List<object> parameters, (List<object> line, int i, Function function) exec, object retObj)> FunctionsExec;
         public Return MainReturn;
 
         public Lib(string txt)
         {
-            FunctionsExec = new List<(string function, List<object> parameters, (List<object> line, int i) exec, object retObj)>();
+            FunctionsExec = new List<(string function, List<object> parameters, (List<object> line, int i, Function function) exec, object retObj)>();
             FunctionCall = false;
             Txt = txt;
+
+
+            var functions = new List<Function>();
             var functionsTxt = txt.Split(new []{"::"}, StringSplitOptions.RemoveEmptyEntries);
             foreach (var functionTxt in functionsTxt)
             {
                 var function = new Function(functionTxt, this);
-                Functions.Add(function);
+                functions.Add(function);
             }
 
-            Memory.Functions.AddRange(Functions);
+            Memory.Functions.AddRange(functions);
         }
 
         public int Exec(object[] parameters)
         {
-            var main = Functions.Find(x => x.Indentifier.ToLower() == "main");
+            var main = Memory.Functions.Find(x => x.Indentifier.ToLower() == "main");
             var ret = main.ExecFunc(parameters);
             if (ret is null)
             {
@@ -50,7 +52,7 @@ namespace New_Inter
 
         public void PreCompile(List<object> parameters)
         {
-            var main = Functions.Find(x => x.Indentifier.ToLower() == "main");
+            var main = Memory.Functions.Find(x => x.Indentifier.ToLower() == "main");
             var line = treeToList(main.GetTree());
 
             var arr = parameters;
@@ -69,27 +71,57 @@ namespace New_Inter
             }
 
 
-            FunctionsExec.Add(("main", parameters, (line, 0), null));
+            FunctionsExec.Add(("main", parameters, (line, 0, main), null));
         }
 
         public void Step()
         {
+            object ret = null;
             var lastF = FunctionsExec.Last();
             var i = lastF.exec.i;
+
+            if (!lastF.exec.line.Any())
+            {
+                ret = lastF.exec.function.ExecFunc(lastF.parameters);
+
+                lastF.retObj = ret;
+                ReturnFunc = lastF;
+
+                FunctionsExec.RemoveAt(FunctionsExec.Count - 1);
+
+                if (!FunctionsExec.Any())
+                {
+                    Return mainReturn;
+
+                    if (!(ret is Return))
+                    {
+                        mainReturn = new Return();
+                    }
+                    else
+                    {
+                        mainReturn = (Return)ret;
+                    }
+
+                    MainReturn = mainReturn;
+                }
+
+                return;
+            }
+
             var obj = lastF.exec.line[i];
-            object ret = null;
+            var flag = Flag.Continue;
+            
 
             if (obj is Statement s)
             {
-                ret = s.ExecFunc();
+                if (!s.Ignone)
+                {
+                    ret = s.Func();
+                }
             }
             else if (obj is Expression e)
             {
-                if (e.AwaitReturn)
-                {
-                    e.CallFunctionReturn = ReturnFunc.retObj;
-                }
-                ret = e.ExecFunc();
+                ret = e.Func();
             }
 
             if (FunctionCall)
@@ -100,7 +132,17 @@ namespace New_Inter
 
             lastF.exec.i = i + 1;
 
-            if (lastF.exec.i > lastF.exec.line.Count || ret is Return)
+            if (ret is Return r)
+            {
+                if (r.Flag == Flag.Repeat)
+                {
+                    lastF.exec.i = i;
+                }
+
+                flag = r.Flag;
+            }
+
+            if (lastF.exec.i > lastF.exec.line.Count - 1 || (flag != Flag.Continue && flag != Flag.Repeat ))
             {
                 lastF.retObj = ret;
                 ReturnFunc = lastF;
@@ -131,14 +173,14 @@ namespace New_Inter
 
         public void AccessNewFunction(string function, List<object> parameters)
         {
-            var functionF = Functions.Find(x => x.Indentifier == function);
+            var functionF = Memory.Functions.Find(x => x.Indentifier == function);
             var line = treeToList(functionF.GetTree());
 
             var arr = parameters;
             for (int i = 0; i < functionF.Parameters.Count; i++)
             {
                 functionF.Parameters[i] = functionF.Parameters[i].Trim();
-                var value = arr[i];
+                var value = arr.Count - 1 <= i ? arr[i] : null;
                 if (value is string s)
                 {
                     Memory.SetVariable(functionF.Parameters[i], functionF.Block, s);
@@ -149,7 +191,7 @@ namespace New_Inter
                 }
             }
 
-            FunctionsExec.Add((function, parameters, (line, 0), null));
+            FunctionsExec.Add((function, parameters, (line, 0, functionF), null));
             FunctionCall = true;
         }
 

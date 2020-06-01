@@ -16,6 +16,7 @@ namespace New_Inter
             MemoryBytes = new List<byte>();
             Variables = new List<Variable>();
             Functions = new List<Function>();
+            DefaultFunctions.Export();
         }
 
         public static void Reset()
@@ -23,6 +24,7 @@ namespace New_Inter
             MemoryBytes.Clear();
             Variables.Clear();
             Functions.Clear();
+            DefaultFunctions.Export();
         }
 
         public static Function GetFunction(string indentifier)

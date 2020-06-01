@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Xml;
 
 namespace New_Inter
 {
@@ -9,20 +10,12 @@ namespace New_Inter
         public string Txt;
         public ExpType type;
         public PreType preType;
-        public Func<object> ExecFunc
-        {
-            get
-            {
-                execValue = Func();
-                return () => execValue;
-            }
-            set => Func = value;
-        }
         public Func<object> Func;
         public string Block;
         public Statement Statement;
         public object CallFunctionReturn;
         public bool AwaitReturn;
+        public Lib Lib;
 
         private object execValue;
 
@@ -42,6 +35,7 @@ namespace New_Inter
             Statement = statement;
             CallFunctionReturn = null;
             AwaitReturn = false;
+            Lib = Statement.Function.Lib;
 
             var binaryOperators = Tokens[0]
                 .OrderByDescending(x => x.Length)
@@ -57,17 +51,20 @@ namespace New_Inter
 
                 var p = txt;
 
-                ExecFunc = () => int.Parse(p);
+                Func = () => int.Parse(p);
                 return;
             }
 
             if (GetStr(txt, out var Qtxt))
             {
-                type = ExpType.Literar;
-                preType = PreType.Str;
+                if (Qtxt.Length == txt.Length - 2)
+                {
+                    type = ExpType.Literar;
+                    preType = PreType.Str;
 
-                ExecFunc = () => Qtxt;
-                return;
+                    Func = () => Qtxt;
+                    return;
+                }
             }
 
             var l = txt[0] == '(';
@@ -83,7 +80,7 @@ namespace New_Inter
 
                 var exp = new Expression(txt, Block ,Statement);
 
-                ExecFunc = exp.ExecFunc;
+                Func = exp.Func;
                 return;
             }
 
@@ -101,17 +98,17 @@ namespace New_Inter
 
                     if (@operator == "&")
                     {
-                        ExecFunc = () => expr.GetValue();
+                        Func = () => expr.GetValue();
                         return;
                     }
                     if (@operator == "*")
                     {
-                        ExecFunc = () => expr.GetValue();
+                        Func = () => expr.GetValue();
                         return;
                     }
                     if (@operator == "-")
                     {
-                        ExecFunc = () =>
+                        Func = () =>
                         {
                             var value = expr.GetValue();
 
@@ -153,7 +150,7 @@ namespace New_Inter
                     }
                     if (@operator == "!")
                     {
-                        ExecFunc = () =>
+                        Func = () =>
                         {
                             var value = expr.GetValue();
 
@@ -195,7 +192,7 @@ namespace New_Inter
                     }
                     if (@operator == "++")
                     {
-                        ExecFunc = () =>
+                        Func = () =>
                         {
                             var value = expr.GetValue();
 
@@ -230,7 +227,7 @@ namespace New_Inter
                     }
                     if (@operator == "--")
                     {
-                        ExecFunc = () =>
+                        Func = () =>
                         {
                             var value = expr.GetValue();
 
@@ -279,7 +276,7 @@ namespace New_Inter
 
                     if (@operator == "++")
                     {
-                        ExecFunc = () =>
+                        Func = () =>
                         {
                             var value = expr.GetValue();
 
@@ -314,7 +311,7 @@ namespace New_Inter
                     }
                     if (@operator == "--")
                     {
-                        ExecFunc = () =>
+                        Func = () =>
                         {
                             var value = expr.GetValue();
 
@@ -350,7 +347,6 @@ namespace New_Inter
                 }
             }
 
-            
             var ops = new List<(int i, int l, string o)>();
             foreach (var @operator in binaryOperators)
             {
@@ -383,17 +379,21 @@ namespace New_Inter
             {
                 var op = txt.Substring(ops[0].i, ops[0].l);
 
-                var exps1 = txt.Substring(0, ops[0].i);
-                var exps2 = txt.Substring(ops[0].i + 1 + ops[0].l);
+                var p = txt.IndexOf('(');
+                if (p > ops[0].i || p == - 1)
+                {
+                    var exps1 = txt.Substring(0, ops[0].i);
+                    var exps2 = txt.Substring(ops[0].i + 1 + ops[0].l);
 
-                var exp1 = new Expression(exps1, Block ,Statement);
-                var exp2 = new Expression(exps2, Block ,Statement);
+                    var exp1 = new Expression(exps1, Block, Statement);
+                    var exp2 = new Expression(exps2, Block, Statement);
 
-                type = ExpType.Binary;
-                preType = PreType.None;
+                    type = ExpType.Binary;
+                    preType = PreType.None;
 
-                GetOperation(op, exp1, exp2);
-                return;
+                    GetOperation(op, exp1, exp2);
+                    return;
+                }
             }
 
 
@@ -403,19 +403,22 @@ namespace New_Inter
             {
                 var indexOfParant = identifier.IndexOf('(' + paranteses + ')', StringComparison.Ordinal);
                 var noParanteses = identifier.Substring(0, indexOfParant).Trim();
-                
-                var parametersTxt = paranteses.Split(',');
                 var parametersExpresions = new List<Expression>();
 
-                foreach (var parantese in parametersTxt)
+                if (!string.IsNullOrWhiteSpace(paranteses))
                 {
-                    var paranteseTrim = parantese.Trim();
+                    var parametersTxt = paranteses.Split(',');
 
-                    var expresion = new Expression(paranteseTrim, Block ,Statement);
-                    parametersExpresions.Add(expresion);
+                    foreach (var parantese in parametersTxt)
+                    {
+                        var paranteseTrim = parantese.Trim();
+
+                        var expresion = new Expression(paranteseTrim, Block, Statement);
+                        parametersExpresions.Add(expresion);
+                    }
                 }
 
-                ExecFunc = () =>
+                Func = () =>
                 {
                     if (!AwaitReturn)
                     {
@@ -427,26 +430,37 @@ namespace New_Inter
                             parameters.Add(expresion.GetValue());
                         }
 
-                        var lib = Statement.Function.Lib;
-                        lib.AccessNewFunction(noParanteses, parameters);
+                        Lib.AccessNewFunction(noParanteses, parameters);
 
-                        return null;
+                        return new Return(null, Flag.Function);
                     }
                     else
                     {
-                        var ret = CallFunctionReturn;
+                        CallFunctionReturn = Lib.ReturnFunc.retObj;
                         AwaitReturn = false;
 
-                        return ((Return)ret).Value;
+                        if (CallFunctionReturn is null)
+                        {
+                            return new Return();
+                        }
+                        else if (CallFunctionReturn is Return r)
+                        {
+                            return r.Value;
+                        }
+                        else
+                        {
+                            return CallFunctionReturn;
+                        }
                     }
                 };
 
                 return;
             }
 
+
             type = ExpType.Literar;
             preType = PreType.Ind;
-            ExecFunc = () => GetIdentifier(txt);
+            Func = () => GetIdentifier(txt);
         }
 
 
@@ -532,11 +546,20 @@ namespace New_Inter
             {
                 if (op == "=")
                 {
-                    ExecFunc = () =>
+                    Func = () =>
                     {
-                        var exec1 = exp1.ExecFunc();
-                        var exec2 = exp2.ExecFunc();
+                        var exec1 = exp1.Func();
+                        var exec2 = exp2.Func();
 
+                        if (exec1 is Return r1)
+                        {
+                            return r1;
+                        }
+
+                        if (exec2 is Return r2)
+                        {
+                            return r2;
+                        }
 
                         if (exp1.preType == PreType.Ind)
                         {
@@ -583,11 +606,20 @@ namespace New_Inter
                 }
                 if (op == ">")
                 {
-                    ExecFunc = () =>
+                    Func = () =>
                     {
-                        var exec1 = exp1.ExecFunc();
-                        var exec2 = exp2.ExecFunc();
+                        var exec1 = exp1.Func();
+                        var exec2 = exp2.Func();
 
+                        if (exec1 is Return r1)
+                        {
+                            return r1;
+                        }
+
+                        if (exec2 is Return r2)
+                        {
+                            return r2;
+                        }
 
                         if (exp1.preType == PreType.Ind)
                         {
@@ -631,11 +663,20 @@ namespace New_Inter
                 }
                 if (op == "<")
                 {
-                    ExecFunc = () =>
+                    Func = () =>
                     {
-                        var exec1 = exp1.ExecFunc();
-                        var exec2 = exp2.ExecFunc();
+                        var exec1 = exp1.Func();
+                        var exec2 = exp2.Func();
 
+                        if (exec1 is Return r1)
+                        {
+                            return r1;
+                        }
+
+                        if (exec2 is Return r2)
+                        {
+                            return r2;
+                        }
 
                         if (exp1.preType == PreType.Ind)
                         {
@@ -679,11 +720,20 @@ namespace New_Inter
                 }
                 if (op == "<=")
                 {
-                    ExecFunc = () =>
+                    Func = () =>
                     {
-                        var exec1 = exp1.ExecFunc();
-                        var exec2 = exp2.ExecFunc();
+                        var exec1 = exp1.Func();
+                        var exec2 = exp2.Func();
 
+                        if (exec1 is Return r1)
+                        {
+                            return r1;
+                        }
+
+                        if (exec2 is Return r2)
+                        {
+                            return r2;
+                        }
 
                         if (exp1.preType == PreType.Ind)
                         {
@@ -727,11 +777,20 @@ namespace New_Inter
                 }
                 if (op == ">=")
                 {
-                    ExecFunc = () =>
+                    Func = () =>
                     {
-                        var exec1 = exp1.ExecFunc();
-                        var exec2 = exp2.ExecFunc();
+                        var exec1 = exp1.Func();
+                        var exec2 = exp2.Func();
 
+                        if (exec1 is Return r1)
+                        {
+                            return r1;
+                        }
+
+                        if (exec2 is Return r2)
+                        {
+                            return r2;
+                        }
 
                         if (exp1.preType == PreType.Ind)
                         {
@@ -775,11 +834,20 @@ namespace New_Inter
                 }
                 if (op == "+")
                 {
-                    ExecFunc = () =>
+                    Func = () =>
                     {
-                        var exec1 = exp1.ExecFunc();
-                        var exec2 = exp2.ExecFunc();
+                        var exec1 = exp1.Func();
+                        var exec2 = exp2.Func();
 
+                        if (exec1 is Return r1)
+                        {
+                            return r1;
+                        }
+
+                        if (exec2 is Return r2)
+                        {
+                            return r2;
+                        }
 
                         if (exp1.preType == PreType.Ind)
                         {
@@ -887,11 +955,20 @@ namespace New_Inter
                 }
                 if (op == "-")
                 {
-                    ExecFunc = () =>
+                    Func = () =>
                     {
-                        var exec1 = exp1.ExecFunc();
-                        var exec2 = exp2.ExecFunc();
+                        var exec1 = exp1.Func();
+                        var exec2 = exp2.Func();
 
+                        if (exec1 is Return r1)
+                        {
+                            return r1;
+                        }
+
+                        if (exec2 is Return r2)
+                        {
+                            return r2;
+                        }
 
                         if (exp1.preType == PreType.Ind)
                         {
@@ -999,11 +1076,20 @@ namespace New_Inter
                 }
                 if (op == "+=")
                 {
-                    ExecFunc = () =>
+                    Func = () =>
                     {
-                        var exec1 = exp1.ExecFunc();
-                        var exec2 = exp2.ExecFunc();
+                        var exec1 = exp1.Func();
+                        var exec2 = exp2.Func();
 
+                        if (exec1 is Return r1)
+                        {
+                            return r1;
+                        }
+
+                        if (exec2 is Return r2)
+                        {
+                            return r2;
+                        }
 
                         if (exp1.preType == PreType.Ind)
                         {
@@ -1126,11 +1212,20 @@ namespace New_Inter
                 }
                 if (op == "-=")
                 {
-                    ExecFunc = () =>
+                    Func = () =>
                     {
-                        var exec1 = exp1.ExecFunc();
-                        var exec2 = exp2.ExecFunc();
+                        var exec1 = exp1.Func();
+                        var exec2 = exp2.Func();
 
+                        if (exec1 is Return r1)
+                        {
+                            return r1;
+                        }
+
+                        if (exec2 is Return r2)
+                        {
+                            return r2;
+                        }
 
                         if (exp1.preType == PreType.Ind)
                         {
@@ -1253,11 +1348,20 @@ namespace New_Inter
                 }
                 if (op == "||")
                 {
-                    ExecFunc = () =>
+                    Func = () =>
                     {
-                        var exec1 = exp1.ExecFunc();
-                        var exec2 = exp2.ExecFunc();
+                        var exec1 = exp1.Func();
+                        var exec2 = exp2.Func();
 
+                        if (exec1 is Return r1)
+                        {
+                            return r1;
+                        }
+
+                        if (exec2 is Return r2)
+                        {
+                            return r2;
+                        }
 
                         if (exp1.preType == PreType.Ind)
                         {
@@ -1316,11 +1420,20 @@ namespace New_Inter
                 }
                 if (op == "&&")
                 {
-                    ExecFunc = () =>
+                    Func = () =>
                     {
-                        var exec1 = exp1.ExecFunc();
-                        var exec2 = exp2.ExecFunc();
+                        var exec1 = exp1.Func();
+                        var exec2 = exp2.Func();
 
+                        if (exec1 is Return r1)
+                        {
+                            return r1;
+                        }
+
+                        if (exec2 is Return r2)
+                        {
+                            return r2;
+                        }
 
                         if (exp1.preType == PreType.Ind)
                         {
@@ -1379,11 +1492,20 @@ namespace New_Inter
                 }
                 if (op == "==")
                 {
-                    ExecFunc = () =>
+                    Func = () =>
                     {
-                        var exec1 = exp1.ExecFunc();
-                        var exec2 = exp2.ExecFunc();
+                        var exec1 = exp1.Func();
+                        var exec2 = exp2.Func();
 
+                        if (exec1 is Return r1)
+                        {
+                            return r1;
+                        }
+
+                        if (exec2 is Return r2)
+                        {
+                            return r2;
+                        }
 
                         if (exp1.preType == PreType.Ind)
                         {
@@ -1424,11 +1546,20 @@ namespace New_Inter
                 }
                 if (op == "!=")
                 {
-                    ExecFunc = () =>
+                    Func = () =>
                     {
-                        var exec1 = exp1.ExecFunc();
-                        var exec2 = exp2.ExecFunc();
+                        var exec1 = exp1.Func();
+                        var exec2 = exp2.Func();
 
+                        if (exec1 is Return r1)
+                        {
+                            return r1;
+                        }
+
+                        if (exec2 is Return r2)
+                        {
+                            return r2;
+                        }
 
                         if (exp1.preType == PreType.Ind)
                         {
@@ -1469,9 +1600,19 @@ namespace New_Inter
                 }
                 if (op == ",")
                 {
-                    ExecFunc = () => null;
+                    Func = () => null;
                 }
             }
+        }
+
+        private bool CheckReturn(object o)
+        {
+            if (o is Return)
+            {
+                return true;
+            }
+
+            return false;
         }
 
         private int GetInt(object s)
