@@ -73,11 +73,47 @@ namespace New_Inter
                 return null;
             };
 
+            var input = new Function("input a:", null);
+            input.ExecFunc = o =>
+            {
+                var param = (List<object>)o;
+                if (param.Count > 0)
+                {
+                    var txt = param[0].ToString();
+                    Console.Write(txt);
+                }
+
+                var inputRead = Console.Read();
+                
+
+                return (char)inputRead;
+            };
+
+            var inputL = new Function("inputL a:", null);
+            inputL.ExecFunc = o =>
+            {
+                var param = (List<object>)o;
+                if (param.Count > 0)
+                {
+                    var txt = param[0].ToString();
+                    Console.Write(txt);
+                }
+
+                var inputRead = Console.ReadLine();
+
+
+                return inputRead;
+            };
+
             defaultFunctions.Add(print);
             defaultFunctions.Add(printL);
+
             defaultFunctions.Add(mul);
             defaultFunctions.Add(div);
             defaultFunctions.Add(divR);
+
+            defaultFunctions.Add(input);
+            defaultFunctions.Add(inputL);
         }
 
         public static void Export()

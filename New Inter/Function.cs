@@ -10,7 +10,6 @@ namespace New_Inter
     {
         public string Indentifier;
         public List<string> Parameters;
-        private Random Random;
         public List<Statement> Branch;
         public Func<object, object> ExecFunc;
         public string Txt;
@@ -19,7 +18,6 @@ namespace New_Inter
 
         public Function(string txt, Lib lib)
         {
-            Random = new Random();
             Lib = lib;
             Block = RandomString(5);
             Branch = new List<Statement>();
@@ -167,7 +165,7 @@ namespace New_Inter
         {
             const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
             return new string(Enumerable.Repeat(chars, length)
-                .Select(s => s[Random.Next(s.Length)]).ToArray());
+                .Select(s => s[StaticRandom.Next(s.Length)]).ToArray());
         }
 
         public override string ToString()

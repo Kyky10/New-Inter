@@ -436,7 +436,7 @@ namespace New_Inter
                     }
                     else
                     {
-                        CallFunctionReturn = Lib.ReturnFunc.retObj;
+                        CallFunctionReturn = Lib.ReturnFunc.RetObj;
                         AwaitReturn = false;
 
                         if (CallFunctionReturn is null)

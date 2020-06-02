@@ -9,7 +9,6 @@ namespace New_Inter
         public List<Object> Branch;
 
         public string Txt;
-        private Random Random;
         public string Block;
         private object execValue;
         public Func<object> Func;
@@ -19,7 +18,6 @@ namespace New_Inter
         public Statement(string txt, Function func, string prevBlock = null)
         {
             Branch = new List<Object>();
-            Random = new Random();
             Function = func;
             txt = txt.Trim();
             Txt = txt;
@@ -422,7 +420,7 @@ namespace New_Inter
         {
             const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
             return new string(Enumerable.Repeat(chars, length)
-                .Select(s => s[Random.Next(s.Length)]).ToArray());
+                .Select(s => s[StaticRandom.Next(s.Length)]).ToArray());
         }
     }
 }

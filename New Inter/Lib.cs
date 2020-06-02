@@ -11,13 +11,13 @@ namespace New_Inter
     {
         public string Txt;
         public bool FunctionCall;
-        public (string function, List<object> parameters, (List<object> line, int i, Function function) exec, object retObj) ReturnFunc;
-        public List<(string function, List<object> parameters, (List<object> line, int i, Function function) exec, object retObj)> FunctionsExec;
+        public FuncExec ReturnFunc;
+        public List<FuncExec> FunctionsExec;
         public Return MainReturn;
 
         public Lib(string txt)
         {
-            FunctionsExec = new List<(string function, List<object> parameters, (List<object> line, int i, Function function) exec, object retObj)>();
+            FunctionsExec = new List<FuncExec>();
             FunctionCall = false;
             Txt = txt;
 
@@ -71,44 +71,33 @@ namespace New_Inter
             }
 
 
-            FunctionsExec.Add(("main", parameters, (line, 0, main), null));
+            FunctionsExec.Add(new FuncExec("main", parameters, new ExecLine(line, 0, main), null));
         }
 
         public void Step()
         {
             object ret = null;
             var lastF = FunctionsExec.Last();
-            var i = lastF.exec.i;
+            var i = lastF.Exec.I;
 
-            if (!lastF.exec.line.Any())
+            if (!lastF.Exec.Line.Any())
             {
-                ret = lastF.exec.function.ExecFunc(lastF.parameters);
+                ret = lastF.Exec.Function.ExecFunc(lastF.Parameters);
 
-                lastF.retObj = ret;
+                lastF.RetObj = ret;
                 ReturnFunc = lastF;
 
                 FunctionsExec.RemoveAt(FunctionsExec.Count - 1);
 
                 if (!FunctionsExec.Any())
                 {
-                    Return mainReturn;
-
-                    if (!(ret is Return))
-                    {
-                        mainReturn = new Return();
-                    }
-                    else
-                    {
-                        mainReturn = (Return)ret;
-                    }
-
-                    MainReturn = mainReturn;
+                    MainReturn = !(ret is Return) ? new Return() : (Return) ret ;
                 }
 
                 return;
             }
 
-            var obj = lastF.exec.line[i];
+            var obj = lastF.Exec.Line[i];
             var flag = Flag.Continue;
             
 
@@ -130,39 +119,28 @@ namespace New_Inter
                 return;
             }
 
-            lastF.exec.i = i + 1;
+            lastF.Exec.I = i + 1;
 
             if (ret is Return r)
             {
                 if (r.Flag == Flag.Repeat)
                 {
-                    lastF.exec.i = i;
+                    lastF.Exec.I = i;
                 }
 
                 flag = r.Flag;
             }
 
-            if (lastF.exec.i > lastF.exec.line.Count - 1 || (flag != Flag.Continue && flag != Flag.Repeat ))
+            if (lastF.Exec.I > lastF.Exec.Line.Count - 1 || (flag != Flag.Continue && flag != Flag.Repeat ))
             {
-                lastF.retObj = ret;
+                lastF.RetObj = ret;
                 ReturnFunc = lastF;
 
                 FunctionsExec.RemoveAt(FunctionsExec.Count - 1);
 
                 if (!FunctionsExec.Any())
                 {
-                    Return mainReturn;
-
-                    if (!(ret is Return))
-                    {
-                        mainReturn = new Return();
-                    }
-                    else
-                    {
-                        mainReturn = (Return)ret;
-                    }
-
-                    MainReturn = mainReturn;
+                    MainReturn = !(ret is Return) ? new Return() : (Return)ret;
                 }
 
                 return;
@@ -191,7 +169,7 @@ namespace New_Inter
                 }
             }
 
-            FunctionsExec.Add((function, parameters, (line, 0, functionF), null));
+            FunctionsExec.Add(new FuncExec(function, parameters, new ExecLine(line, 0, functionF), null));
             FunctionCall = true;
         }
 
