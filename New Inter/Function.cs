@@ -1,28 +1,28 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace New_Inter
 {
     class Function
     {
-        public string Indentifier;
+        public string Identifier;
         public List<string> Parameters;
         public List<Statement> Branch;
-        public Func<object, object> ExecFunc;
+        public Func<object, object> Exec;
         public string Txt;
         public string Block;
         public Lib Lib;
+        public List<object> Tree;
 
-        public Function(string txt, Lib lib)
+        public Function(string txt, Lib lib, string block = null)
         {
             Lib = lib;
-            Block = RandomString(5);
+            Block = block is null ? RandomString(5) : block + "/" + RandomString(5);
             Branch = new List<Statement>();
             Parameters = new List<string>();
-            ExecFunc = o => null;
+            Tree = null;
+            Exec = o => null;
 
             txt = txt.Trim();
             Txt = txt;
@@ -34,7 +34,7 @@ namespace New_Inter
 
             var idnenStatment = txt.Split(new[]{':'}, 2);
             var idenParam = idnenStatment[0].Split(new[] {' '}, 2);
-            Indentifier = idenParam[0];
+            Identifier = idenParam[0];
             if (idenParam.Length > 1)
             {
                 var parameters = idenParam[1].Trim().Split(',');
@@ -45,13 +45,13 @@ namespace New_Inter
             var statTxt = idnenStatment[1];
             if (!string.IsNullOrWhiteSpace(statTxt))
             {
-                var statament = new Statement(statTxt, this, Block);
+                var statament = new Statement(statTxt, Lib, Block);
                 Branch.Add(statament);
             }
 
 
 
-            ExecFunc = o =>
+            Exec = o =>
             {
                 var tree = treeToList(GetTree(Branch[0]));
 
@@ -60,21 +60,13 @@ namespace New_Inter
                 {
                     Parameters[i] = Parameters[i].Trim();
                     var value = arr[i];
-                    if (value is string s)
-                    {
-                        Memory.SetVariable(Parameters[i], Block, s);
-                    }
-                    if (value is int ii)
-                    {
-                        Memory.SetVariable(Parameters[i], Block, ii);
-                    }
+                    Memory.SetVariable(Parameters[i], Block, value);
                 }
 
                 var ret = ExecTree(tree);
                 return (ret as Return)?.Value;
             };
         }
-
 
         private List<object> treeToList(List<object> tree)
         {
@@ -98,7 +90,11 @@ namespace New_Inter
 
             if (statement is null)
             {
-                if (Branch.Any())
+                if (Tree != null)
+                {
+                    return Tree;
+                }
+                else if (Branch.Any())
                 {
                     statement = Branch[0];
                 }
@@ -139,11 +135,11 @@ namespace New_Inter
                 var b = tree[i];
                 if (b is Expression e)
                 {
-                    o = e.Func();
+                    o = e.Exec();
                 }
                 if (b is Statement s)
                 {
-                    o = s.Func();
+                    o = s.Exec();
                 }
 
                 if (b is List<object> lo)

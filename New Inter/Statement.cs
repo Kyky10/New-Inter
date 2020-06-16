@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using New_Inter.Classes;
 
 namespace New_Inter
 {
@@ -10,18 +11,21 @@ namespace New_Inter
 
         public string Txt;
         public string Block;
-        private object execValue;
-        public Func<object> Func;
-        public Function Function;
+        public Func<object> Exec;
+        public Lib Lib;
         public bool Ignone;
+        public bool Assign;
+        private bool awaitFunction;
 
-        public Statement(string txt, Function func, string prevBlock = null)
+        public Statement(string txt, Lib lib, string prevBlock = null)
         {
             Branch = new List<Object>();
-            Function = func;
+            Lib = lib;
             txt = txt.Trim();
             Txt = txt;
             Ignone = false;
+            Assign = false;
+            awaitFunction = false;
             var randomStr = RandomString(10);
 
             Block = prevBlock;
@@ -35,56 +39,18 @@ namespace New_Inter
                 var statTxt = outStr;
                 var stats = new List<Statement>();
 
-                var par = statTxt.IndexOfAny(new[] { '{', '}' });
-                var nextStat = statTxt.IndexOf(';');
+                var statsTxt = statTxt.SplitSkip(";");
 
-                while (nextStat > 0)
+                foreach (var s in statsTxt)
                 {
-                    
-                    if ((par > nextStat || par < 0))
-                    {
-                        var statStr = statTxt.Split(new[] {';'}, 2, StringSplitOptions.RemoveEmptyEntries);
-                        var stat = new Statement(statStr[0], Function, Block);
-                        stats.Add(stat);
-
-                        nextStat++;
-
-                        statTxt = statTxt.Substring(nextStat, statTxt.Length - nextStat);
-                    }
-                    else if (nextStat < 0)
-                    {
-                        var stat = new Statement(statTxt, Function, Block);
-                        stats.Add(stat);
-                    }
-                    else
-                    {
-                        var str = "";
-                        if (GetStr(statTxt, out str, '{', '}'))
-                        {
-                            par = statTxt.IndexOf(str, StringComparison.Ordinal) + str.Length + 1;
-                        }
-
-                        var statStr = statTxt.Substring(0, par);
-
-                        var stat = new Statement(statStr, Function, Block);
-                        stats.Add(stat);
-
-                        par++;
-
-                        statTxt = statTxt.Substring(par, statTxt.Length - par);
-                    }
-
-                    par = statTxt.IndexOfAny(new[] { '{', '}' });
-                    nextStat = statTxt.IndexOf(';');
+                    var ss = new Statement(s, lib, prevBlock);
+                    stats.Add(ss);
                 }
                  
                 Branch.AddRange(stats);
 
-                Func = () => null;//ExecTree(treeToList(Branch));
-                /*{
-                    stats.ForEach(x => x.Func());
-                    return null;
-                };*/
+                Exec = () => null;
+
                 return;
             }
 
@@ -98,31 +64,44 @@ namespace New_Inter
                 var split = '(' + exprTxt + ')';
                 var positionSplit = txt.IndexOf(split, StringComparison.Ordinal);
                 var txtSplit = txt.Substring(positionSplit + split.Length, txt.Length - positionSplit - split.Length);
-                var ifStat = new Statement(txtSplit, Function, Block);
+                var ifStat = new Statement(txtSplit, Lib, Block);
                 var tree = new List<object>();
 
                 Branch.Add(expr);
 
-                Func = () =>
+                Exec = () =>
                 {
-                    if (!tree.Any())
+                    if (!awaitFunction)
                     {
-                        tree = treeToList(GetTree(ifStat));
-                    }
-                    var value = expr.GetValue();
 
-                    if (IsTrue(value))
-                    {
-                        var ret = ExecTree(tree);
-                        if (ret != null)
+                        if (!tree.Any())
                         {
-                            return ret;
+                            tree = treeToList(GetTree(ifStat));
+                        }
+                        var value = expr.GetValue();
+
+                        if (IsTrue(value))
+                        {
+                            awaitFunction = true;
+
+                            var tempFunction = new Function("temp:", Lib, Block);
+
+                            tempFunction.Tree = tree;
+
+                            Lib.AccessNewFunction(tempFunction, null);
+
+                            return new Return();
                         }
 
-                        return new Return(null, Flag.Continue);
+                        return null;
                     }
+                    else
+                    {
+                        awaitFunction = false;
 
-                    return null;
+                        var ret = Lib.GetReturn();
+                        return ret;
+                    }
                 };
                 return;
             }
@@ -137,14 +116,21 @@ namespace New_Inter
                 var split = '(' + exprTxt + ')';
                 var positionSplit = txt.IndexOf(split, StringComparison.Ordinal);
                 var txtSplit = txt.Substring(positionSplit + split.Length, txt.Length - positionSplit - split.Length);
-                var whileStat = new Statement(txtSplit, Function, Block);
+                var whileStat = new Statement(txtSplit, Lib, Block);
                 var tree = new List<object>();
 
 
                 Branch.Add(expr);
 
-                Func = () =>
+                Exec = () =>
                 {
+                    if (awaitFunction)
+                    {
+                        awaitFunction = false;
+
+                        var ret = Lib.GetReturn();
+                    }
+
                     if (!tree.Any())
                     {
                         tree = treeToList(GetTree(whileStat));
@@ -153,8 +139,14 @@ namespace New_Inter
 
                     if (IsTrue(value))
                     {
-                        var ret = ExecTree(tree);
-                        return new Return(null, Flag.Repeat);
+                        awaitFunction = true;
+
+                        var tempFunction = new Function("temp:", Lib, Block) {Tree = tree};
+
+
+                        Lib.AccessNewFunction(tempFunction, null);
+
+                        return new Return();
                     }
 
                     return null;
@@ -169,7 +161,7 @@ namespace New_Inter
 
                 Branch.Add(expr);
 
-                Func = () =>
+                Exec = () =>
                 {
                     var value = expr.GetValue();
                     var ret = new Return(value);
@@ -181,6 +173,7 @@ namespace New_Inter
 
             if (txt.StartsWith("var"))
             {
+                Assign = true;
                 var inEx = txt.Substring(4, txt.Length - 4);
                 var inSplitEx = inEx.Split(new []{'='}, 2);
                 var identifier = inSplitEx[0].Trim();
@@ -189,24 +182,23 @@ namespace New_Inter
 
                 Branch.Add(expression);
 
-                Func = () =>
+                Exec = () =>
                 {
                     var value = expression.GetValue();
 
-                    if (value is string s)
-                    {
-                        Memory.SetVariable(identifier, Block, s);
-                    }
 
-                    if (value is int i)
+                    if (value is Return r)
                     {
-                        Memory.SetVariable(identifier, Block, i);
+                        return r;
                     }
 
                     if (value is bool b)
                     {
                         Memory.SetVariable(identifier, Block, b ? 1 : 0);
+                        return null;
                     }
+
+                    Memory.SetVariable(identifier, Block, value);
 
                     return null;
                 };
@@ -215,39 +207,27 @@ namespace New_Inter
 
             if (txt.Length == 0)
             {
-                Func = () => null;
+                Exec = () => null;
             }
 
             var exp = new Expression(txt, Block, this);
 
+            Assign = exp.Type == EType.Asg;
+
             Branch.Add(exp);
-            Func = () => exp.Func();
+            Exec = () => exp.Exec();
         }
 
         private bool IsTrue(object ob)
         {
-            if (ob is int i)
+            if (ob is BoolClass boolClass)
             {
-                return i % 2 == 1;
+                return boolClass.Value;
             }
-            else if (ob is string s)
+            else
             {
-                var ss = s.ToLower();
-                if (bool.TryParse(ss, out var b))
-                {
-                    return b;
-                }
-                else if (int.TryParse(s, out i))
-                {
-                    return i % 2 != 0;
-                }
+                return ob.GetInt() % 2 == 1;
             }
-            else if (ob is bool b)
-            {
-                return b;
-            }
-
-            return false;
         }
 
         private bool GetStr(string str, out string outStr, char caracterStart = '"', char caracterEnd = '"')
@@ -383,11 +363,11 @@ namespace New_Inter
                 var b = tree[i];
                 if (b is Expression e)
                 {
-                    o = e.Func();
+                    o = e.Exec();
                 }
                 if (b is Statement s)
                 {
-                    o = s.Func();
+                    o = s.Exec();
                 }
 
                 if (b is List<object> lo)

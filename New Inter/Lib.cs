@@ -11,32 +11,50 @@ namespace New_Inter
     {
         public string Txt;
         public bool FunctionCall;
-        public FuncExec ReturnFunc;
+        private List<object> ReturnFunc;
         public List<FuncExec> FunctionsExec;
         public Return MainReturn;
 
         public Lib(string txt)
         {
             FunctionsExec = new List<FuncExec>();
+            ReturnFunc = new List<object>();
             FunctionCall = false;
             Txt = txt;
 
-
             var functions = new List<Function>();
-            var functionsTxt = txt.Split(new []{"::"}, StringSplitOptions.RemoveEmptyEntries);
+            var functionsTxt = txt.SplitSkip(";");
             foreach (var functionTxt in functionsTxt)
             {
-                var function = new Function(functionTxt, this);
-                functions.Add(function);
-            }
+                var functionTxtTrim = functionTxt.Trim();
 
+                if (functionTxtTrim.StartsWith("class"))
+                {
+                    var l = "class".Length + 1;
+                    var classStruc = functionTxtTrim.Substring(l);
+                    var idenEnd = classStruc.IndexOf('{');
+
+                    var iden = classStruc.Substring(0, idenEnd).Trim();
+
+                    var classTxt = Ext.GetExpressionBr(classStruc);
+
+                    var c = new CustomClass(iden, classTxt.txt, this);
+
+                    Memory.Classes.Add(c);
+                }
+                else
+                {
+                    var function = new Function(functionTxtTrim, this);
+                    functions.Add(function);
+                }
+            }
             Memory.Functions.AddRange(functions);
         }
 
         public int Exec(object[] parameters)
         {
-            var main = Memory.Functions.Find(x => x.Indentifier.ToLower() == "main");
-            var ret = main.ExecFunc(parameters);
+            var main = Memory.Functions.Find(x => x.Identifier.ToLower() == "main");
+            var ret = main.Exec(parameters);
             if (ret is null)
             {
                 return 0;
@@ -52,8 +70,9 @@ namespace New_Inter
 
         public void PreCompile(List<object> parameters)
         {
-            var main = Memory.Functions.Find(x => x.Indentifier.ToLower() == "main");
+            var main = Memory.Functions.Find(x => x.Identifier.ToLower() == "main");
             var line = treeToList(main.GetTree());
+            
 
             var arr = parameters;
             for (int i = 0; i < main.Parameters.Count; i++)
@@ -82,10 +101,10 @@ namespace New_Inter
 
             if (!lastF.Exec.Line.Any())
             {
-                ret = lastF.Exec.Function.ExecFunc(lastF.Parameters);
+                ret = lastF.Exec.Function.Exec(lastF.Parameters);
 
                 lastF.RetObj = ret;
-                ReturnFunc = lastF;
+                AddReturn(lastF.RetObj);
 
                 FunctionsExec.RemoveAt(FunctionsExec.Count - 1);
 
@@ -105,12 +124,12 @@ namespace New_Inter
             {
                 if (!s.Ignone)
                 {
-                    ret = s.Func();
+                    ret = s.Exec();
                 }
             }
             else if (obj is Expression e)
             {
-                ret = e.Func();
+                ret = e.Exec();
             }
 
             if (FunctionCall)
@@ -134,7 +153,7 @@ namespace New_Inter
             if (lastF.Exec.I > lastF.Exec.Line.Count - 1 || (flag != Flag.Continue && flag != Flag.Repeat ))
             {
                 lastF.RetObj = ret;
-                ReturnFunc = lastF;
+                AddReturn(lastF.RetObj);
 
                 FunctionsExec.RemoveAt(FunctionsExec.Count - 1);
 
@@ -151,7 +170,7 @@ namespace New_Inter
 
         public void AccessNewFunction(string function, List<object> parameters)
         {
-            var functionF = Memory.Functions.Find(x => x.Indentifier == function);
+            var functionF = Memory.Functions.Find(x => x.Identifier == function);
             var line = treeToList(functionF.GetTree());
 
             var arr = parameters;
@@ -173,6 +192,41 @@ namespace New_Inter
             FunctionCall = true;
         }
 
+        public void AccessNewFunction(Function function, List<object> parameters)
+        {
+            var line = treeToList(function.GetTree());
+            
+            for (int i = 0; i < function.Parameters.Count; i++)
+            {
+                function.Parameters[i] = function.Parameters[i].Trim();
+                var value = parameters.Count - 1 <= i ? parameters[i] : null;
+                if (value is string s)
+                {
+                    Memory.SetVariable(function.Parameters[i], function.Block, s);
+                }
+                if (value is int ii)
+                {
+                    Memory.SetVariable(function.Parameters[i], function.Block, ii);
+                }
+            }
+
+            FunctionsExec.Add(new FuncExec(function.Identifier, parameters, new ExecLine(line, 0, function), null));
+            FunctionCall = true;
+        }
+
+        public object GetReturn()
+        {
+            var ret = ReturnFunc.Last();
+            ReturnFunc.Remove(ret);
+
+            return ret;
+        }
+
+        public void AddReturn(object ret)
+        {
+            ReturnFunc.Add(ret);
+        }
+
         private List<object> treeToList(List<object> tree)
         {
             var line = new List<object>();
@@ -188,6 +242,8 @@ namespace New_Inter
 
             return line;
         }
+
+        
 
 
         public override string ToString()

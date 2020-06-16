@@ -13,8 +13,8 @@ namespace New_Inter
             var execTime = 0;
             var watch = new Stopwatch();
 
-
             Memory.Reset();
+
             var file = Environment.GetFolderPath(Environment.SpecialFolder.Desktop) + "\\" + "program.inter";
             if (args.Length > 0)
             {
@@ -23,6 +23,8 @@ namespace New_Inter
             
             var txt = File.ReadAllText(file);
             var lib = new Lib(txt);
+
+
             watch.Start();
             lib.PreCompile(new List<object> {3});
             watch.Stop();

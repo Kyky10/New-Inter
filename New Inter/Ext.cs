@@ -1,10 +1,7 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
-using System.Runtime.CompilerServices;
-using System.Text;
-using System.Threading.Tasks;
+using New_Inter.Classes;
 
 namespace New_Inter
 {
@@ -93,6 +90,246 @@ namespace New_Inter
             }
 
             return true;
+        }
+
+        public static List<string> SplitSkip(this string txt, string sepatator = "::")
+        {
+            var i = 0;
+            var ii = 0;
+            List<string> split = new List<string>();
+            i = txt.IndexOf(sepatator, ii, StringComparison.Ordinal);
+
+            if (i < 0)
+            {
+                return split;
+            }
+
+            do
+            {
+                var op = GetExpressionBr(txt);
+
+                var overlap = i > op.i && i < op.e;
+                if (overlap)
+                {
+                    ii = op.e;
+                }
+                else
+                {
+                    var splitT = SplitAtIndex(txt, i);
+                    split.Add(splitT[0]);
+
+                    txt = txt.Substring(i + sepatator.Length);
+
+                    if (txt.IndexOf(sepatator, 0, StringComparison.Ordinal) < 0)
+                    {
+                        if (!string.IsNullOrWhiteSpace(splitT[1].Trim().Replace(sepatator, "")))
+                        {
+                            split.Add(splitT[1].Substring(sepatator.Length));
+                        }
+                        break;
+                    }
+
+                    ii = 0;
+                }
+
+                i = txt.IndexOf(sepatator, ii, StringComparison.Ordinal);
+
+                if (i < 0)
+                {
+                    if (!string.IsNullOrWhiteSpace(txt.Trim().Replace(sepatator, "")))
+                    {
+                        split.Add(txt);
+                    }
+                }
+
+            } while (i > -1);
+
+            return split;
+        }
+
+        public static (string txt, int i, int e) GetExpressionBr(this string txt)
+        {
+            var startBool = false;
+            var start = 0;
+            var countP = 0;
+
+            for (int i = 0; i < txt.Length; i++)
+            {
+                var c = txt[i];
+                if (!startBool)
+                {
+                    if (c == '{')
+                    {
+                        startBool = true;
+                        start = i;
+                        countP++;
+                    }
+                }
+                else
+                {
+                    if (c == '{')
+                    {
+                        countP++;
+                    }
+
+                    if (c == '}')
+                    {
+                        countP--;
+
+                        if (countP == 0)
+                        {
+                            var end = i;
+                            var sub = txt.Substring(start + 1, end - start - 1);
+
+                            return (sub, start, end);
+                        }
+                    }
+                }
+            }
+
+            return (null, 0, 0);
+        }
+
+        public static string[] SplitAtIndex(this string txt, int index)
+        {
+            var halfs = new string[2];
+
+            halfs[0] = txt.Substring(0, index);
+            halfs[1] = txt.Substring(index, txt.Length - index);
+
+            return halfs;
+        }
+
+        public static int GetInt(this object obj)
+        {
+            if (obj is IntClass intClass)
+            {
+                return intClass.Value;
+            }
+
+            if (obj is int i)
+            {
+                return i;
+            }
+
+            if (obj is BoolClass boolClass)
+            {
+                return boolClass.Value ? 1 : 0;
+            }
+
+            if (obj is string strValue)
+            {
+                if (int.TryParse(strValue, out var ii))
+                {
+                    return ii;
+                }
+
+                return strValue.Length;
+            }
+
+            if (obj is StrClass strClass)
+            {
+                var value = strClass.Value;
+                if (int.TryParse(value, out var ii))
+                {
+                    return ii;
+                }
+
+                return strClass.Value.Length;
+            }
+
+            if (obj is Variable v)
+            {
+                var ob = v.GetValue();
+
+                return GetInt(ob);
+            }
+
+            if (obj is null)
+            {
+                return 0;
+            }
+            else
+            {
+                return 1;
+            }
+        }
+
+        public static bool GetInt(this object obj, out int i)
+        {
+            if (obj is IntClass intClass)
+            {
+                i = intClass.Value;
+                return true;
+            }
+
+            if (obj is BoolClass boolClass)
+            {
+                i = boolClass.Value ? 1 : 0;
+                return true;
+            }
+
+            if (obj is int ii)
+            {
+                i = ii;
+                return true;
+            }
+
+            if (obj is StrClass strClass)
+            {
+                var value = strClass.Value;
+                if (int.TryParse(value, out var iii))
+                {
+                    i = iii;
+                    return true;
+                }
+
+                i = strClass.Value.Length;
+            }
+
+            if (obj is Variable v)
+            {
+                var ob = v.GetValue();
+
+                i =  GetInt(ob);
+
+                return true;
+            }
+
+            i = 0;
+            return false;
+        }
+
+        public static string GetStr(this object obj)
+        {
+            if (obj is StrClass strClass)
+            {
+                return strClass.Value;
+            }
+
+            if (obj is BoolClass boolClass)
+            {
+                return (boolClass.Value ? "true" : "false");
+            }
+
+            if (GetInt(obj, out var i))
+            {
+                return i.ToString();
+            }
+
+            if (obj is string strValue)
+            {
+                return strValue;
+            }
+
+            if (obj is Variable v)
+            {
+                var ob = v.GetValue();
+
+                return GetStr(ob);
+            }
+
+            return null;
         }
     }
 }

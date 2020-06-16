@@ -4,14 +4,14 @@ using System.Linq;
 
 namespace New_Inter
 {
-    static class DefaultFunctions
+    static class DefaultImport
     {
         public static List<Function> defaultFunctions = new List<Function>();
 
-        static DefaultFunctions()
+        static DefaultImport()
         {
             var print = new Function("print txt:", null);
-            print.ExecFunc = o =>
+            print.Exec = o =>
             {
                 var param = (List<object>)o;
                 var txt = param.Any() ? param[0].ToString() : null;
@@ -20,7 +20,7 @@ namespace New_Inter
             };
 
             var printL = new Function("printL txt:", null);
-            printL.ExecFunc = o =>
+            printL.Exec = o =>
             {
                 var param = (List<object>)o;
                 var txt = param.Any() ? param[0].ToString() : null;
@@ -29,7 +29,7 @@ namespace New_Inter
             };
 
             var mul = new Function("mul a, b:", null);
-            mul.ExecFunc = o =>
+            mul.Exec = o =>
             {
                 var param = (List<object>)o;
                 if (param.Count == 2)
@@ -44,7 +44,7 @@ namespace New_Inter
             };
 
             var div = new Function("div a, b:", null);
-            div.ExecFunc = o =>
+            div.Exec = o =>
             {
                 var param = (List<object>)o;
                 if (param.Count == 2)
@@ -59,7 +59,7 @@ namespace New_Inter
             };
 
             var divR = new Function("divR a, b:", null);
-            divR.ExecFunc = o =>
+            divR.Exec = o =>
             {
                 var param = (List<object>)o;
                 if (param.Count == 2)
@@ -74,7 +74,7 @@ namespace New_Inter
             };
 
             var input = new Function("input a:", null);
-            input.ExecFunc = o =>
+            input.Exec = o =>
             {
                 var param = (List<object>)o;
                 if (param.Count > 0)
@@ -90,7 +90,7 @@ namespace New_Inter
             };
 
             var inputL = new Function("inputL a:", null);
-            inputL.ExecFunc = o =>
+            inputL.Exec = o =>
             {
                 var param = (List<object>)o;
                 if (param.Count > 0)
@@ -114,6 +114,8 @@ namespace New_Inter
 
             defaultFunctions.Add(input);
             defaultFunctions.Add(inputL);
+
+
         }
 
         public static void Export()

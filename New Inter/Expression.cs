@@ -1,30 +1,29 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Xml;
+using New_Inter.Classes;
 
 namespace New_Inter
 {
     class Expression
     {
         public string Txt;
-        public ExpType type;
-        public PreType preType;
-        public Func<object> Func;
+        public EType Type;
+        public Func<object> Exec;
         public string Block;
         public Statement Statement;
         public object CallFunctionReturn;
         public bool AwaitReturn;
         public Lib Lib;
 
-        private object execValue;
-
-        private readonly string[][] Tokens = {
+        private readonly string[][] _tokens = {
             new[]{"=", "+", "-", "+=", "-=", "||", "&&", "==", "!=", ">", "<", ">=", "<="}, //binary 0
-            new[]{"&", "*", "-", "!", "++", "--"}, //unitary 1
+            new[]{ "-", "!", "++", "--"}, //unitary 1
             new[]{ "(", ")", "[", "]", "{", "}", ";"}, //parantes 2
             new[]{ "?"} //tenary 3
             };
+
+        private readonly string[] priority = {"||", "&&"};
 
 
         public Expression(string txt, string block, Statement statement)
@@ -35,52 +34,122 @@ namespace New_Inter
             Statement = statement;
             CallFunctionReturn = null;
             AwaitReturn = false;
-            Lib = Statement.Function.Lib;
+            Lib = Statement.Lib;
 
-            var binaryOperators = Tokens[0]
+            var binaryOperators = _tokens[0]
                 .OrderByDescending(x => x.Length)
                 .ToArray();
-            var unitaryOperators = Tokens[1]
+            var unitaryOperators = _tokens[1]
                 .OrderByDescending(x => x.Length)
                 .ToArray();
 
             if (int.TryParse(txt, out _))
             {
-                type = ExpType.Literar;
-                preType = PreType.Int;
+                Type = EType.Int;
 
                 var p = txt;
 
-                Func = () => int.Parse(p);
+                Exec = () =>
+                {
+                    var value = p.GetInt();
+
+                    var i = new IntClass(value);
+
+                    return i;
+                };
                 return;
             }
 
-            if (GetStr(txt, out var Qtxt))
+            if (GetStr(txt, out var qtxt))
             {
-                if (Qtxt.Length == txt.Length - 2)
+                if (qtxt.Length == txt.Length - 2)
                 {
-                    type = ExpType.Literar;
-                    preType = PreType.Str;
+                    Type = EType.Str;
 
-                    Func = () => Qtxt;
+                    Exec = () =>
+                    {
+                        var value = qtxt.GetStr();
+
+                        var s = new StrClass(value);
+
+                        return s;
+                    };
                     return;
                 }
             }
 
-            var l = txt[0] == '(';
-            var f = txt[txt.Length - 1] == ')';
+            if (bool.TryParse(txt, out var valueBool))
+            {
+                Type = EType.Bool;
+
+                Exec = () =>
+                {
+                    var value = new BoolClass(valueBool);
+
+                    return value;
+                };
+                return;
+            }
+
+            if (txt.StartsWith("new"))
+            {
+                var ident = txt.Substring(3);
+                if(GetStr(ident, out var brackets, '(', ')'))
+                {
+                    CustomClass customClass = null;
+                    var i = ident.IndexOf("(" + brackets + ")", StringComparison.Ordinal);
+                    var identWb = ident.Remove(i, brackets.Length + 2).Trim();
+                    var parametersExpresions = new List<Expression>();
+
+                    if (!string.IsNullOrWhiteSpace(brackets))
+                    {
+                        var parametersTxt = brackets.Split(',');
+
+                        foreach (var parantese in parametersTxt)
+                        {
+                            var paranteseTrim = parantese.Trim();
+
+                            var expresion = new Expression(paranteseTrim, Block, Statement);
+                            parametersExpresions.Add(expresion);
+                        }
+                    }
+
+                    Exec = () =>
+                    {
+                        if (!AwaitReturn)
+                        {
+                            var parametersValue = parametersExpresions.Select(x => x.GetValue()).ToList();
+
+                            customClass = Memory.GetClass( identWb, Block).Clone();
+
+                            customClass.Assign(parametersValue);
+                            AwaitReturn = true;
+
+                            return new Return(null, Flag.Function);
+                        }
+                        else
+                        {
+                            AwaitReturn = false;
+                            return (IClass)customClass;
+                        }
+                    };
+                }
+                return;
+            }
+
+            var l = txt.First() == '(';
+            var f = txt.Last() == ')';
 
             if (l && f)
             {
 
                 txt = txt.Substring(1, txt.Length - 2);
 
-                type = ExpType.Literar;
-                preType = PreType.Par;
+                Type = EType.Par;
 
                 var exp = new Expression(txt, Block ,Statement);
 
-                Func = exp.Func;
+                Exec = exp.Exec;
                 return;
             }
 
@@ -88,27 +157,16 @@ namespace New_Inter
             {
                 if (txt.StartsWith(@operator))
                 {
-                    type = ExpType.Unitary;
-                    preType = PreType.None;
+                    Type = EType.None;
 
 
                     var len = @operator.Length;
                     var exprTxt = txt.Substring(len, txt.Length - len);
                     var expr = new Expression(exprTxt, Block ,Statement);
-
-                    if (@operator == "&")
-                    {
-                        Func = () => expr.GetValue();
-                        return;
-                    }
-                    if (@operator == "*")
-                    {
-                        Func = () => expr.GetValue();
-                        return;
-                    }
+                    
                     if (@operator == "-")
                     {
-                        Func = () =>
+                        Exec = () =>
                         {
                             var value = expr.GetValue();
 
@@ -129,9 +187,9 @@ namespace New_Inter
                                 }
                             }
 
-                            if (expr.preType == PreType.Ind)
+                            if (expr.Type == EType.Ind)
                             {
-                                var variable = expr.Func().ToString();
+                                var variable = expr.Exec().ToString();
                                 var variable1 = Memory.GetVariable(variable, Block);
                                 if (value is string ss)
                                 {
@@ -150,7 +208,7 @@ namespace New_Inter
                     }
                     if (@operator == "!")
                     {
-                        Func = () =>
+                        Exec = () =>
                         {
                             var value = expr.GetValue();
 
@@ -171,9 +229,9 @@ namespace New_Inter
                                 }
                             }
 
-                            if (expr.preType == PreType.Ind)
+                            if (expr.Type == EType.Ind)
                             {
-                                var variable = expr.Func().ToString();
+                                var variable = expr.Exec().ToString();
                                 var variable1 = Memory.GetVariable(variable, Block);
                                 if (value is string ss)
                                 {
@@ -192,7 +250,7 @@ namespace New_Inter
                     }
                     if (@operator == "++")
                     {
-                        Func = () =>
+                        Exec = () =>
                         {
                             var value = expr.GetValue();
 
@@ -206,9 +264,9 @@ namespace New_Inter
                                 value = s.ToUpper();
                             }
 
-                            if (expr.preType == PreType.Ind)
+                            if (expr.Type == EType.Ind)
                             {
-                                var variable = expr.Func().ToString();
+                                var variable = expr.Exec().ToString();
                                 var variable1 = Memory.GetVariable(variable, Block);
                                 if (value is string ss)
                                 {
@@ -227,7 +285,7 @@ namespace New_Inter
                     }
                     if (@operator == "--")
                     {
-                        Func = () =>
+                        Exec = () =>
                         {
                             var value = expr.GetValue();
 
@@ -241,9 +299,9 @@ namespace New_Inter
                                 value = s.ToLower();
                             }
 
-                            if (expr.preType == PreType.Ind)
+                            if (expr.Type == EType.Ind)
                             {
-                                var variable = expr.Func().ToString();
+                                var variable = expr.Exec().ToString();
                                 var variable1 = Memory.GetVariable(variable, Block);
                                 if (value is string ss)
                                 {
@@ -265,8 +323,7 @@ namespace New_Inter
                 }
                 else if (txt.EndsWith(@operator))
                 {
-                    type = ExpType.Unitary;
-                    preType = PreType.None;
+                    Type = EType.None;
 
 
                     var len = @operator.Length;
@@ -276,7 +333,7 @@ namespace New_Inter
 
                     if (@operator == "++")
                     {
-                        Func = () =>
+                        Exec = () =>
                         {
                             var value = expr.GetValue();
 
@@ -290,9 +347,9 @@ namespace New_Inter
                                 value = s.ToUpper();
                             }
 
-                            if (expr.preType == PreType.Ind)
+                            if (expr.Type == EType.Ind)
                             {
-                                var variable = expr.Func().ToString();
+                                var variable = expr.Exec().ToString();
                                 var variable1 = Memory.GetVariable(variable, Block);
                                 if (value is string ss)
                                 {
@@ -311,7 +368,7 @@ namespace New_Inter
                     }
                     if (@operator == "--")
                     {
-                        Func = () =>
+                        Exec = () =>
                         {
                             var value = expr.GetValue();
 
@@ -325,9 +382,9 @@ namespace New_Inter
                                 value = s.ToLower();
                             }
 
-                            if (expr.preType == PreType.Ind)
+                            if (expr.Type == EType.Ind)
                             {
-                                var variable = expr.Func().ToString();
+                                var variable = expr.Exec().ToString();
                                 var variable1 = Memory.GetVariable(variable, Block);
                                 if (value is string ss)
                                 {
@@ -353,27 +410,38 @@ namespace New_Inter
                 for (int i = txt.IndexOf(@operator, StringComparison.Ordinal); i > -1; i = txt.IndexOf(@operator, i + 1, StringComparison.Ordinal))
                 {
                     var toAdd = (i, @operator.Length, @operator);
-                    var Add = true;
+                    var add = true;
 
                     foreach (var op in ops)
                     {
                         var overlap = toAdd.i < op.i + op.l && op.i < toAdd.i + toAdd.Length;
                         if (overlap)
                         {
-                            Add = false;
+                            add = false;
                             break;
                         }
                     }
 
-                    if (Add)
+                    if (add)
                     {
                         ops.Add(toAdd);
                     }
                 }
             }
 
-            ops = ops.OrderBy(x => x.i).ToList();
-            var exprsStr = txt.Split(binaryOperators, StringSplitOptions.None);
+            ops = ops.OrderBy(x =>
+            {
+                if (priority.Contains(x.o))
+                {
+                    return 0;
+                }
+                else
+                {
+                    return x.i;
+                }
+            }).ToList();
+
+            var exprsStr = txt.Split(binaryOperators, 2, StringSplitOptions.None);
 
             if (exprsStr.Length > 1)
             {
@@ -388,79 +456,147 @@ namespace New_Inter
                     var exp1 = new Expression(exps1, Block, Statement);
                     var exp2 = new Expression(exps2, Block, Statement);
 
-                    type = ExpType.Binary;
-                    preType = PreType.None;
+                    Type = EType.Asg;
 
-                    GetOperation(op, exp1, exp2);
+                    SetOperation(op, exp1, exp2);
                     return;
                 }
             }
 
 
-            var identifier = GetIdentifier(txt);
-
-            if (GetStr(identifier, out var paranteses, '(', ')'))
+            if (GetStr(Txt, out var paranteses, '(', ')'))
             {
-                var indexOfParant = identifier.IndexOf('(' + paranteses + ')', StringComparison.Ordinal);
-                var noParanteses = identifier.Substring(0, indexOfParant).Trim();
+                Type = EType.Func;
+
+                var indexOfParant = Txt.IndexOf('(' + paranteses + ')', StringComparison.Ordinal);
+                var function = Txt.Substring(0, indexOfParant).Trim();
                 var parametersExpresions = new List<Expression>();
 
                 if (!string.IsNullOrWhiteSpace(paranteses))
                 {
-                    var parametersTxt = paranteses.Split(',');
-
-                    foreach (var parantese in parametersTxt)
-                    {
-                        var paranteseTrim = parantese.Trim();
-
-                        var expresion = new Expression(paranteseTrim, Block, Statement);
-                        parametersExpresions.Add(expresion);
-                    }
+                    parametersExpresions = paranteses.Split(',')
+                        .Select(x => new Expression(x.Trim(),
+                            Block,
+                            Statement))
+                        .ToList();
                 }
 
-                Func = () =>
+                if (function.Contains("."))
                 {
-                    if (!AwaitReturn)
+                    var classAccess = function;
+                    var exprClassAccess = new Expression(classAccess, block, Statement);
+                    Exec = () =>
                     {
-                        AwaitReturn = true;
-
-                        var parameters = new List<object>();
-                        foreach (var expresion in parametersExpresions)
+                        if (!AwaitReturn)
                         {
-                            parameters.Add(expresion.GetValue());
-                        }
+                            var value = exprClassAccess.GetValue();
 
-                        Lib.AccessNewFunction(noParanteses, parameters);
+                            if (value is Function func)
+                            {
+                                var parameters = parametersExpresions.Select(x => x.GetValue()).ToList();
 
-                        return new Return(null, Flag.Function);
-                    }
-                    else
-                    {
-                        CallFunctionReturn = Lib.ReturnFunc.RetObj;
-                        AwaitReturn = false;
+                                Lib.AccessNewFunction(func, parameters);
+                                AwaitReturn = true;
+                            }
+                            else if(value is Variable variable)
+                            {
+                                if (variable.Type == typeof(Function))
+                                {
+                                    var func2 = (Function)variable.GetValue();
+                                    var parameters = parametersExpresions.Select(x => x.GetValue()).ToList();
 
-                        if (CallFunctionReturn is null)
-                        {
-                            return new Return();
-                        }
-                        else if (CallFunctionReturn is Return r)
-                        {
-                            return r.Value;
+                                    Lib.AccessNewFunction(func2, parameters);
+                                    AwaitReturn = true;
+                                }
+                            }
+
+                            return null;
                         }
                         else
                         {
-                            return CallFunctionReturn;
+                            CallFunctionReturn = Lib.GetReturn();
+                            AwaitReturn = false;
+
+                            if (CallFunctionReturn is null)
+                            {
+                                return new Return();
+                            }
+                            else if (CallFunctionReturn is Return r)
+                            {
+                                return r.Value;
+                            }
+                            else
+                            {
+                                return CallFunctionReturn;
+                            }
                         }
+                    };
+                    return;
+                }
+                else
+                {
+                    Exec = () =>
+                    {
+                        if (!AwaitReturn)
+                        {
+                            AwaitReturn = true;
+
+                            var parameters = parametersExpresions.Select(x => x.GetValue()).ToList();
+
+                            Lib.AccessNewFunction(function, parameters);
+
+                            return new Return(null, Flag.Function);
+                        }
+                        else
+                        {
+                            CallFunctionReturn = Lib.GetReturn();
+                            AwaitReturn = false;
+
+                            if (CallFunctionReturn is null)
+                            {
+                                return new Return();
+                            }
+                            else if (CallFunctionReturn is Return r)
+                            {
+                                return r.Value;
+                            }
+                            else
+                            {
+                                return CallFunctionReturn;
+                            }
+                        }
+                    };
+                }
+                
+                return;
+            }
+
+            if (Txt.Contains("."))
+            {
+                Type = EType.Cls;
+
+                var dotIndex = Txt.LastIndexOf('.');
+                var split = Txt.SplitAtIndex(dotIndex);
+                var second = split[1].Substring(1);
+
+                var exprTxt = split[0];
+                var expr = new Expression(exprTxt, block, Statement);
+                Exec = () =>
+                {
+                    var value = expr.GetValue();
+                    if(value is IClass @class)
+                    {
+                        return @class.Get(second);
                     }
+
+                    return null;
                 };
 
                 return;
             }
 
-
-            type = ExpType.Literar;
-            preType = PreType.Ind;
-            Func = () => GetIdentifier(txt);
+            Type = EType.Ind;
+            Exec = () => GetIdentifier(txt);
         }
 
 
@@ -535,1114 +671,88 @@ namespace New_Inter
 
         private string GetIdentifier(string str)
         {
-            var strT = str.TrimStart();
-            var end = strT.Length;
-
-            return strT.Substring(0, end);
+            return str.Trim();
         }
 
-        private void GetOperation(string op, Expression exp1, Expression exp2)
+        private void SetOperation(string op, Expression exp1, Expression exp2)
         {
+            if (op == "=")
             {
-                if (op == "=")
+                Exec = () =>
                 {
-                    Func = () =>
+                    var exec1 = exp1.Exec();
+                    var exec2 = exp2.GetValue();
+
+                    if (exec1 is Return r1)
                     {
-                        var exec1 = exp1.Func();
-                        var exec2 = exp2.Func();
+                        return r1;
+                    }
 
-                        if (exec1 is Return r1)
+                    if (exec2 is Return r2)
+                    {
+                        return r2;
+                    }
+
+                    if (exp1.Type == EType.Ind)
+                    {
+                        var variable1 = Memory.GetVariable(exec1.ToString(), Block);
+
+                        if (variable1 is null)
                         {
-                            return r1;
+                            variable1 = new Variable(exec1.ToString(), Block, null);
+                            Memory.AddVariable(variable1);
                         }
 
-                        if (exec2 is Return r2)
-                        {
-                            return r2;
-                        }
-
-                        if (exp1.preType == PreType.Ind)
-                        {
-                            var variable1 = Memory.GetVariable(exec1.ToString(), Block);
-
-                            if (exp2.preType == PreType.Ind)
-                            {
-                                var variable2 = Memory.GetVariable(exec2.ToString(), Block);
-                                var value2 = variable2.GetValue();
-
-                                if (value2 is int iii)
-                                {
-                                    var var = iii;
-                                    variable1.SetValue(var);
-                                    return var;
-                                }
-                                else
-                                {
-                                    var var = value2.ToString();
-                                    variable1.SetValue(var);
-                                    return var;
-                                }
-                            }
-                            else if (exec2 is int iii)
-                            {
-                                var var = iii;
-                                variable1.SetValue(var);
-                                return var;
-                            }
-                            else if (exec2 is string sss)
-                            {
-                                var var = sss;
-                                variable1.SetValue(var);
-                                return var;
-                            }
-
-                            return null;
-                        }
-
+                        variable1.SetValue(exec2);
 
                         return null;
-                    };
-                    return;
-                }
-                if (op == ">")
-                {
-                    Func = () =>
-                    {
-                        var exec1 = exp1.Func();
-                        var exec2 = exp2.Func();
+                    }
 
-                        if (exec1 is Return r1)
-                        {
-                            return r1;
-                        }
 
-                        if (exec2 is Return r2)
-                        {
-                            return r2;
-                        }
-
-                        if (exp1.preType == PreType.Ind)
-                        {
-                            var variable1 = Memory.GetVariable(exec1.ToString(), Block);
-                            var value = GetInt(variable1.GetValue());
-
-                            if (exp2.preType == PreType.Ind)
-                            {
-                                var variable2 = Memory.GetVariable(exec2.ToString(), Block);
-                                var value2 = GetInt(variable2.GetValue());
-
-                                var var = value > value2;
-                                return var;
-                            }
-                            else
-                            {
-                                var var = value > GetInt(exec2);
-                                return var;
-                            }
-                          
-                        }
-                        else
-                        {
-                            var value = GetInt(exec1);
-                            if (exp2.preType == PreType.Ind)
-                            {
-                                var variable2 = Memory.GetVariable(exec2.ToString(), Block);
-                                var value2 = variable2.GetValue();
-
-                                var var = value > GetInt(value2);
-                                return var;
-                            }
-                            else
-                            {
-                                var var = value > GetInt(exec2);
-                                return var;
-                            }
-                        }
-                    };
-                    return;
-                }
-                if (op == "<")
-                {
-                    Func = () =>
-                    {
-                        var exec1 = exp1.Func();
-                        var exec2 = exp2.Func();
-
-                        if (exec1 is Return r1)
-                        {
-                            return r1;
-                        }
-
-                        if (exec2 is Return r2)
-                        {
-                            return r2;
-                        }
-
-                        if (exp1.preType == PreType.Ind)
-                        {
-                            var variable1 = Memory.GetVariable(exec1.ToString(), Block);
-                            var value = GetInt(variable1.GetValue());
-
-                            if (exp2.preType == PreType.Ind)
-                            {
-                                var variable2 = Memory.GetVariable(exec2.ToString(), Block);
-                                var value2 = GetInt(variable2.GetValue());
-
-                                var var = value < value2;
-                                return var;
-                            }
-                            else
-                            {
-                                var var = value < GetInt(exec2);
-                                return var;
-                            }
-
-                        }
-                        else
-                        {
-                            var value = GetInt(exec1);
-                            if (exp2.preType == PreType.Ind)
-                            {
-                                var variable2 = Memory.GetVariable(exec2.ToString(), Block);
-                                var value2 = variable2.GetValue();
-
-                                var var = value < GetInt(value2);
-                                return var;
-                            }
-                            else
-                            {
-                                var var = value < GetInt(exec2);
-                                return var;
-                            }
-                        }
-                    };
-                    return;
-                }
-                if (op == "<=")
-                {
-                    Func = () =>
-                    {
-                        var exec1 = exp1.Func();
-                        var exec2 = exp2.Func();
-
-                        if (exec1 is Return r1)
-                        {
-                            return r1;
-                        }
-
-                        if (exec2 is Return r2)
-                        {
-                            return r2;
-                        }
-
-                        if (exp1.preType == PreType.Ind)
-                        {
-                            var variable1 = Memory.GetVariable(exec1.ToString(), Block);
-                            var value = GetInt(variable1.GetValue());
-
-                            if (exp2.preType == PreType.Ind)
-                            {
-                                var variable2 = Memory.GetVariable(exec2.ToString(), Block);
-                                var value2 = GetInt(variable2.GetValue());
-
-                                var var = value <= value2;
-                                return var;
-                            }
-                            else
-                            {
-                                var var = value <= GetInt(exec2);
-                                return var;
-                            }
-
-                        }
-                        else
-                        {
-                            var value = GetInt(exec1);
-                            if (exp2.preType == PreType.Ind)
-                            {
-                                var variable2 = Memory.GetVariable(exec2.ToString(), Block);
-                                var value2 = variable2.GetValue();
-
-                                var var = value <= GetInt(value2);
-                                return var;
-                            }
-                            else
-                            {
-                                var var = value <= GetInt(exec2);
-                                return var;
-                            }
-                        }
-                    };
-                    return;
-                }
-                if (op == ">=")
-                {
-                    Func = () =>
-                    {
-                        var exec1 = exp1.Func();
-                        var exec2 = exp2.Func();
-
-                        if (exec1 is Return r1)
-                        {
-                            return r1;
-                        }
-
-                        if (exec2 is Return r2)
-                        {
-                            return r2;
-                        }
-
-                        if (exp1.preType == PreType.Ind)
-                        {
-                            var variable1 = Memory.GetVariable(exec1.ToString(), Block);
-                            var value = GetInt(variable1.GetValue());
-
-                            if (exp2.preType == PreType.Ind)
-                            {
-                                var variable2 = Memory.GetVariable(exec2.ToString(), Block);
-                                var value2 = GetInt(variable2.GetValue());
-
-                                var var = value >= value2;
-                                return var;
-                            }
-                            else
-                            {
-                                var var = value >= GetInt(exec2);
-                                return var;
-                            }
-
-                        }
-                        else
-                        {
-                            var value = GetInt(exec1);
-                            if (exp2.preType == PreType.Ind)
-                            {
-                                var variable2 = Memory.GetVariable(exec2.ToString(), Block);
-                                var value2 = variable2.GetValue();
-
-                                var var = value >= GetInt(value2);
-                                return var;
-                            }
-                            else
-                            {
-                                var var = value >= GetInt(exec2);
-                                return var;
-                            }
-                        }
-                    };
-                    return;
-                }
-                if (op == "+")
-                {
-                    Func = () =>
-                    {
-                        var exec1 = exp1.Func();
-                        var exec2 = exp2.Func();
-
-                        if (exec1 is Return r1)
-                        {
-                            return r1;
-                        }
-
-                        if (exec2 is Return r2)
-                        {
-                            return r2;
-                        }
-
-                        if (exp1.preType == PreType.Ind)
-                        {
-                            var variable1 = Memory.GetVariable(exec1.ToString(), Block);
-                            var value = variable1.GetValue();
-                            if (value is string ss)
-                            {
-                                if (exp2.preType == PreType.Ind)
-                                {
-                                    var variable2 = Memory.GetVariable(exec2.ToString(), Block);
-                                    var value2 = variable2.GetValue();
-
-                                    var var = ss + value2;
-                                    return var;
-                                }
-                                else
-                                {
-                                    var var = ss + exec2;
-                                    return var;
-                                }
-
-                            }
-                            else
-                            {
-                                var ii = (int)value;
-                                if (exp2.preType == PreType.Ind)
-                                {
-                                    var variable2 = Memory.GetVariable(exec2.ToString(), Block);
-                                    var value2 = variable2.GetValue();
-
-                                    if (value2 is int iii)
-                                    {
-                                        var var = ii + iii;
-                                        return var;
-                                    }
-                                    else
-                                    {
-                                        var var = ii + value2.ToString();
-                                        return var;
-                                    }
-                                }
-                                else if (exec2 is int iii)
-                                {
-                                    var var = ii + iii;
-                                    return var;
-                                }
-                                else if (exec2 is string sss)
-                                {
-                                    var var = ii + sss;
-                                    return var;
-                                }
-                            }
-
-                            return null;
-                        }
-                        else
-                        {
-                            if (exec1 is string ss)
-                            {
-                                if (exp2.preType == PreType.Ind)
-                                {
-                                    var variable2 = Memory.GetVariable(exec2.ToString(), Block);
-                                    var value2 = variable2.GetValue();
-
-                                    var var = ss + value2;
-                                    return var;
-                                }
-                                else
-                                {
-                                    var var = ss + exec2;
-                                    return var;
-                                }
-
-                            }
-                            else
-                            {
-                                var ii = (int)exec1;
-                                if (exp2.preType == PreType.Ind)
-                                {
-                                    var variable2 = Memory.GetVariable(exec2.ToString(), Block);
-                                    var value2 = variable2.GetValue();
-
-                                    if (value2 is int iii)
-                                    {
-                                        var var = ii + iii;
-                                        return var;
-                                    }
-                                }
-                                else if (exec2 is int iii)
-                                {
-                                    var var = ii + iii;
-                                    return var;
-                                }
-                                else if (exec2 is string sss)
-                                {
-                                    var var = ii + sss;
-                                    return var;
-                                }
-                            }
-
-                            return null;
-                        }
-                    };
-                    return;
-                }
-                if (op == "-")
-                {
-                    Func = () =>
-                    {
-                        var exec1 = exp1.Func();
-                        var exec2 = exp2.Func();
-
-                        if (exec1 is Return r1)
-                        {
-                            return r1;
-                        }
-
-                        if (exec2 is Return r2)
-                        {
-                            return r2;
-                        }
-
-                        if (exp1.preType == PreType.Ind)
-                        {
-                            var variable1 = Memory.GetVariable(exec1.ToString(), Block);
-                            var value = variable1.GetValue();
-                            if (value is string ss)
-                            {
-                                if (exp2.preType == PreType.Ind)
-                                {
-                                    var variable2 = Memory.GetVariable(exec2.ToString(), Block);
-                                    var value2 = variable2.GetValue();
-
-                                    var var = ss.Replace(value2.ToString(), "");
-                                    return var;
-                                }
-                                else
-                                {
-                                    var var = ss.Replace(exec2.ToString(), "");
-                                    return var;
-                                }
-
-                            }
-                            else
-                            {
-                                var ii = (int)value;
-                                if (exp2.preType == PreType.Ind)
-                                {
-                                    var variable2 = Memory.GetVariable(exec2.ToString(), Block);
-                                    var value2 = variable2.GetValue();
-
-                                    if (value2 is int iii)
-                                    {
-                                        var var = ii - iii;
-                                        return var;
-                                    }
-                                    else
-                                    {
-                                        var var = ii.ToString().Replace(value2.ToString(), "");
-                                        return var;
-                                    }
-                                }
-                                else if (exec2 is int iii)
-                                {
-                                    var var = ii - iii;
-                                    return var;
-                                }
-                                else if (exec2 is string sss)
-                                {
-                                    var var = ii.ToString().Replace(sss, "");
-                                    return var;
-                                }
-                            }
-
-                            return null;
-                        }
-                        else
-                        {
-                            if (exec1 is string ss)
-                            {
-                                if (exp2.preType == PreType.Ind)
-                                {
-                                    var variable2 = Memory.GetVariable(exec2.ToString(), Block);
-                                    var value2 = variable2.GetValue();
-
-                                    var var = ss.Replace(value2.ToString(), "");
-                                    return var;
-                                }
-                                else
-                                {
-                                    var var = ss.Replace(exec2.ToString(), "");
-                                    return var;
-                                }
-
-                            }
-                            else
-                            {
-                                var ii = (int)exec1;
-                                if (exp2.preType == PreType.Ind)
-                                {
-                                    var variable2 = Memory.GetVariable(exec2.ToString(), Block);
-                                    var value2 = variable2.GetValue();
-
-                                    if (value2 is int iii)
-                                    {
-                                        var var = ii - iii;
-                                        return var;
-                                    }
-                                }
-                                else if (exec2 is int iii)
-                                {
-                                    var var = ii - iii;
-                                    return var;
-                                }
-                                else if (exec2 is string sss)
-                                {
-                                    var var = ii.ToString().Replace(sss, "");
-                                    return var;
-                                }
-                            }
-
-                            return null;
-                        }
-                    };
-                    return;
-                }
-                if (op == "+=")
-                {
-                    Func = () =>
-                    {
-                        var exec1 = exp1.Func();
-                        var exec2 = exp2.Func();
-
-                        if (exec1 is Return r1)
-                        {
-                            return r1;
-                        }
-
-                        if (exec2 is Return r2)
-                        {
-                            return r2;
-                        }
-
-                        if (exp1.preType == PreType.Ind)
-                        {
-                            var variable = Memory.GetVariable(exec1.ToString(), Block);
-                            var value = variable.GetValue();
-                            if (value is string ss)
-                            {
-                                if (exp2.preType == PreType.Ind)
-                                {
-                                    var variable2 = Memory.GetVariable(exec2.ToString(), Block);
-                                    var value2 = variable2.GetValue();
-
-                                    var var = ss + value2;
-
-                                    variable.SetValue(var);
-
-                                    return var;
-                                }
-                                else
-                                {
-                                    var var = ss + exec2;
-
-                                    variable.SetValue(var);
-
-                                    return var;
-                                }
-
-                            }
-                            else
-                            {
-                                var ii = (int)value;
-                                if (exp2.preType == PreType.Ind)
-                                {
-                                    var variable2 = Memory.GetVariable(exec2.ToString(), Block);
-                                    var value2 = variable2.GetValue();
-
-                                    if (value2 is int iii)
-                                    {
-                                        var var = ii + iii;
-                                        variable.SetValue(var);
-                                        return var;
-                                    }
-                                    else
-                                    {
-                                        var var = ii + value2.ToString();
-                                        variable.SetValue(var);
-                                        return var;
-                                    }
-                                }
-                                else if (exec2 is int iii)
-                                {
-                                    var var = ii + iii;
-
-                                    variable.SetValue(var);
-
-                                    return var;
-                                }
-                                else if (exec2 is string sss)
-                                {
-                                    var var = ii + sss;
-
-                                    variable.SetValue(var);
-
-                                    return var;
-                                }
-                            }
-
-                            return null;
-                        }
-                        else
-                        {
-                            if (exec1 is string ss)
-                            {
-                                if (exp2.preType == PreType.Ind)
-                                {
-                                    var variable2 = Memory.GetVariable(exec2.ToString(), Block);
-                                    var value2 = variable2.GetValue();
-
-                                    var var = ss + value2;
-                                    return var;
-                                }
-                                else
-                                {
-                                    var var = ss + exec2;
-                                    return var;
-                                }
-
-                            }
-                            else
-                            {
-                                var ii = (int)exec1;
-                                if (exp2.preType == PreType.Ind)
-                                {
-                                    var variable2 = Memory.GetVariable(exec2.ToString(), Block);
-                                    var value2 = variable2.GetValue();
-
-                                    if (value2 is int iii)
-                                    {
-                                        var var = ii + iii;
-                                        return var;
-                                    }
-                                }
-                                else if (exec2 is int iii)
-                                {
-                                    var var = ii + iii;
-                                    return var;
-                                }
-                                else if (exec2 is string sss)
-                                {
-                                    var var = ii + sss;
-                                    return var;
-                                }
-                            }
-
-                            return null;
-                        }
-
-                    };
-                    return;
-                }
-                if (op == "-=")
-                {
-                    Func = () =>
-                    {
-                        var exec1 = exp1.Func();
-                        var exec2 = exp2.Func();
-
-                        if (exec1 is Return r1)
-                        {
-                            return r1;
-                        }
-
-                        if (exec2 is Return r2)
-                        {
-                            return r2;
-                        }
-
-                        if (exp1.preType == PreType.Ind)
-                        {
-                            var variable = Memory.GetVariable(exec1.ToString(), Block);
-                            var value = variable.GetValue();
-                            if (value is string ss)
-                            {
-                                if (exp2.preType == PreType.Ind)
-                                {
-                                    var variable2 = Memory.GetVariable(exec2.ToString(), Block);
-                                    var value2 = variable2.GetValue();
-
-                                    var var = ss.Replace(value2.ToString(), "");
-
-                                    variable.SetValue(var);
-
-                                    return var;
-                                }
-                                else
-                                {
-                                    var var = ss.Replace(exec2.ToString(), "");
-
-                                    variable.SetValue(var);
-
-                                    return var;
-                                }
-
-                            }
-                            else
-                            {
-                                var ii = (int)value;
-                                if (exp2.preType == PreType.Ind)
-                                {
-                                    var variable2 = Memory.GetVariable(exec2.ToString(), Block);
-                                    var value2 = variable2.GetValue();
-
-                                    if (value2 is int iii)
-                                    {
-                                        var var = ii - iii;
-                                        variable.SetValue(var);
-                                        return var;
-                                    }
-                                    else
-                                    {
-                                        var var = ii.ToString().Replace(value2.ToString(), "");
-                                        variable.SetValue(var);
-                                        return var;
-                                    }
-                                }
-                                else if (exec2 is int iii)
-                                {
-                                    var var = ii - iii;
-
-                                    variable.SetValue(var);
-
-                                    return var;
-                                }
-                                else if (exec2 is string sss)
-                                {
-                                    var var = ii.ToString().Replace(sss, "");
-
-                                    variable.SetValue(var);
-
-                                    return var;
-                                }
-                            }
-
-                            return null;
-                        }
-                        else
-                        {
-                            if (exec1 is string ss)
-                            {
-                                if (exp2.preType == PreType.Ind)
-                                {
-                                    var variable2 = Memory.GetVariable(exec2.ToString(), Block);
-                                    var value2 = variable2.GetValue();
-
-                                    var var = ss.Replace(value2.ToString(), "");
-                                    return var;
-                                }
-                                else
-                                {
-                                    var var = ss.Replace(exec2.ToString(), "");
-                                    return var;
-                                }
-
-                            }
-                            else
-                            {
-                                var ii = (int)exec1;
-                                if (exp2.preType == PreType.Ind)
-                                {
-                                    var variable2 = Memory.GetVariable(exec2.ToString(), Block);
-                                    var value2 = variable2.GetValue();
-
-                                    if (value2 is int iii)
-                                    {
-                                        var var = ii - iii;
-                                        return var;
-                                    }
-                                }
-                                else if (exec2 is int iii)
-                                {
-                                    var var = ii - iii;
-                                    return var;
-                                }
-                                else if (exec2 is string sss)
-                                {
-                                    var var = ii.ToString().Replace(sss, "");
-                                    return var;
-                                }
-                            }
-
-                            return null;
-                        }
-
-                    };
-                    return;
-                }
-                if (op == "||")
-                {
-                    Func = () =>
-                    {
-                        var exec1 = exp1.Func();
-                        var exec2 = exp2.Func();
-
-                        if (exec1 is Return r1)
-                        {
-                            return r1;
-                        }
-
-                        if (exec2 is Return r2)
-                        {
-                            return r2;
-                        }
-
-                        if (exp1.preType == PreType.Ind)
-                        {
-                            var variable1 = Memory.GetVariable(exec1.ToString(), Block);
-                            var value = variable1.GetValue();
-                            if (value is int ii)
-                            {
-                                if (exp2.preType == PreType.Ind)
-                                {
-                                    var variable2 = Memory.GetVariable(exec2.ToString(), Block);
-                                    var value2 = variable2.GetValue();
-
-                                    if (value2 is int iii)
-                                    {
-                                        var var = ii | iii;
-                                        return var;
-                                    }
-                                }
-                                else if (exec2 is int iii)
-                                {
-                                    var var = ii | iii;
-                                    return var;
-                                }
-
-                            }
-
-                            return null;
-                        }
-                        else
-                        {
-                            if (exec1 is int ii)
-                            {
-                                if (exp2.preType == PreType.Ind)
-                                {
-                                    var variable2 = Memory.GetVariable(exec2.ToString(), Block);
-                                    var value2 = variable2.GetValue();
-
-                                    if (value2 is int iii)
-                                    {
-                                        var var = ii | iii;
-                                        return var;
-                                    }
-                                }
-                                else if (exec2 is int iii)
-                                {
-                                    var var = ii | iii;
-                                    return var;
-                                }
-
-                            }
-
-                            return null;
-                        }
-                    };
-                    return;
-                }
-                if (op == "&&")
-                {
-                    Func = () =>
-                    {
-                        var exec1 = exp1.Func();
-                        var exec2 = exp2.Func();
-
-                        if (exec1 is Return r1)
-                        {
-                            return r1;
-                        }
-
-                        if (exec2 is Return r2)
-                        {
-                            return r2;
-                        }
-
-                        if (exp1.preType == PreType.Ind)
-                        {
-                            var variable1 = Memory.GetVariable(exec1.ToString(), Block);
-                            var value = variable1.GetValue();
-                            if (value is int ii)
-                            {
-                                if (exp2.preType == PreType.Ind)
-                                {
-                                    var variable2 = Memory.GetVariable(exec2.ToString(), Block);
-                                    var value2 = variable2.GetValue();
-
-                                    if (value2 is int iii)
-                                    {
-                                        var var = ii & iii;
-                                        return var;
-                                    }
-                                }
-                                else if (exec2 is int iii)
-                                {
-                                    var var = ii & iii;
-                                    return var;
-                                }
-
-                            }
-
-                            return null;
-                        }
-                        else
-                        {
-                            if (exec1 is int ii)
-                            {
-                                if (exp2.preType == PreType.Ind)
-                                {
-                                    var variable2 = Memory.GetVariable(exec2.ToString(), Block);
-                                    var value2 = variable2.GetValue();
-
-                                    if (value2 is int iii)
-                                    {
-                                        var var = ii & iii;
-                                        return var;
-                                    }
-                                }
-                                else if (exec2 is int iii)
-                                {
-                                    var var = ii & iii;
-                                    return var;
-                                }
-
-                            }
-
-                            return null;
-                        }
-                    };
-                    return;
-                }
-                if (op == "==")
-                {
-                    Func = () =>
-                    {
-                        var exec1 = exp1.Func();
-                        var exec2 = exp2.Func();
-
-                        if (exec1 is Return r1)
-                        {
-                            return r1;
-                        }
-
-                        if (exec2 is Return r2)
-                        {
-                            return r2;
-                        }
-
-                        if (exp1.preType == PreType.Ind)
-                        {
-                            var variable1 = Memory.GetVariable(exec1.ToString(), Block);
-                            var value = variable1.GetValue();
-
-                            if (exp2.preType == PreType.Ind)
-                            {
-                                var variable2 = Memory.GetVariable(exec2.ToString(), Block);
-                                var value2 = variable2.GetValue();
-
-                                return value.ExEquals(value2);
-                            }
-                            else if (exec2 is int iii)
-                            {
-                                return value.ExEquals(iii);
-                            }
-
-                            return null;
-                        }
-                        else
-                        {
-
-                            if (exp2.preType == PreType.Ind)
-                            {
-                                var variable2 = Memory.GetVariable(exec2.ToString(), Block);
-                                var value2 = variable2.GetValue();
-
-                                return exec1.ExEquals(value2);
-                            }
-                            else
-                            {
-                                return exec1.ExEquals(exec2);
-                            }
-                        }
-                    };
-                    return;
-                }
-                if (op == "!=")
-                {
-                    Func = () =>
-                    {
-                        var exec1 = exp1.Func();
-                        var exec2 = exp2.Func();
-
-                        if (exec1 is Return r1)
-                        {
-                            return r1;
-                        }
-
-                        if (exec2 is Return r2)
-                        {
-                            return r2;
-                        }
-
-                        if (exp1.preType == PreType.Ind)
-                        {
-                            var variable1 = Memory.GetVariable(exec1.ToString(), Block);
-                            var value = variable1.GetValue();
-
-                            if (exp2.preType == PreType.Ind)
-                            {
-                                var variable2 = Memory.GetVariable(exec2.ToString(), Block);
-                                var value2 = variable2.GetValue();
-
-                                return !value.ExEquals(value2);
-                            }
-                            else if (exec2 is int iii)
-                            {
-                                return !iii.ExEquals(exec2);
-                            }
-
-                            return null;
-                        }
-                        else
-                        {
-
-                            if (exp2.preType == PreType.Ind)
-                            {
-                                var variable2 = Memory.GetVariable(exec2.ToString(), Block);
-                                var value2 = variable2.GetValue();
-
-                                return !exec1.ExEquals(value2);
-                            }
-                            else
-                            {
-                                return !exec1.ExEquals(exec2);
-                            }
-                        }
-                    };
-                    return;
-                }
-                if (op == ",")
-                {
-                    Func = () => null;
-                }
+                    return null;
+                };
+                return;
             }
-        }
-
-        private bool CheckReturn(object o)
-        {
-            if (o is Return)
+            else
             {
-                return true;
-            }
-
-            return false;
-        }
-
-        private int GetInt(object s)
-        {
-            if (s is string ss)
-            {
-                if (int.TryParse(ss, out var i))
+                Exec = () =>
                 {
-                    return i;
-                }
-                return ss.Length;
+                    var value1 = exp1.GetValue();
+                    var value2 = exp2.GetValue();
+
+                    if (value1 is IClass class1)
+                    {
+                        if (value2 is IClass class2)
+                        {
+                            var oper = class1.Operations.Find(x => x.OperationStr == op);
+                            var func = oper.Function;
+
+                            var retValue = func.Exec(new[] {class1, class2});
+
+                            return retValue;
+                        }
+                    }
+
+                    return null;
+                };
             }
 
-            if (s is int ii)
-            {
-                return ii;
-            }
-
-            return 0;
         }
 
         public object GetValue()
         {
-            var exec = Func();
+            var exec = Exec();
 
-            if (preType == PreType.Ind)
+            if (Type == EType.Ind)
             {
                 var variable = Memory.GetVariable(exec.ToString(), Block);
                 var value = variable.GetValue();
+                return value;
+            }
 
+            if (exec is Variable v)
+            {
+                var value = v.GetValue();
                 return value;
             }
 
@@ -1656,22 +766,17 @@ namespace New_Inter
     }
 
 
-    enum ExpType
-    {
-        Literar,
-        Indexing,
-        Function,
-        Binary,
-        Unitary,
-        Pre
-    }
 
-    enum PreType
+    enum EType
     {
         None = -1,
         Int,
         Str,
         Ind,
+        Bool,
         Par,
+        Cls,
+        Func,
+        Asg
     }
 }
